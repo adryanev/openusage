@@ -16,8 +16,8 @@ final class ProviderAccountsStoreTests: XCTestCase {
         identityKey: String,
         label: String? = nil,
         anchor: String = "/Users/dev/.claude"
-    ) -> ProviderAccountsStore.Observation {
-        ProviderAccountsStore.Observation(
+    ) -> ProviderAccountsStore.AccountObservation {
+        ProviderAccountsStore.AccountObservation(
             family: family,
             identityKey: identityKey,
             label: label,
@@ -122,5 +122,74 @@ final class ProviderAccountsStoreTests: XCTestCase {
     func testFamilyHelperSplitsCardIDs() {
         XCTAssertEqual(ProviderAccountID.family(of: "claude"), "claude")
         XCTAssertEqual(ProviderAccountID.family(of: "claude@ab12cd34"), "claude")
+    }
+
+    func testSelectedProfilesAndAliasPersistWithoutChangingAccountIdentity() {
+        let defaults = makeScratchDefaults()
+        let store = ProviderAccountsStore(defaults: defaults)
+        store.reconcile(with: [defaultHomeObservation(family: "claude", identityKey: "acct-a", label: "a@example.com")])
+        let profile = SelectedAccountProfile(family: "claude", path: "/Users/dev/.claude-work",
+                                             keychainLiteral: "~/.claude-work")
+
+        XCTAssertTrue(store.addSelectedProfile(profile))
+        XCTAssertFalse(store.addSelectedProfile(profile))
+        store.setAlias("Work", for: "claude")
+
+        let reloaded = ProviderAccountsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.selectedProfiles, [profile])
+        XCTAssertEqual(reloaded.records.first?.alias, "Work")
+        XCTAssertEqual(reloaded.records.first?.identityKey, "acct-a")
+    }
+
+    func testDisplayNameUpdatesWithoutRebuildingAProvider() {
+        let defaults = makeScratchDefaults()
+        let store = ProviderAccountsStore(defaults: defaults)
+        store.reconcile(with: [defaultHomeObservation(
+            family: "codex", identityKey: "workspace|user@example.test", label: "user@example.test"
+        )])
+        let original = "Codex: Workspace 123 (user@example.test)"
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), original)
+        store.setAlias("Work", for: "codex")
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), "Codex: Work")
+        store.setAlias(nil, for: "codex")
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), original)
+
+        store.setAlias("Work", for: "codex")
+        let relaunched = ProviderAccountsStore(defaults: defaults)
+        relaunched.setAlias(nil, for: "codex")
+        XCTAssertEqual(relaunched.displayName(for: "codex", fallback: "Codex: Work"),
+                       "Codex: user@example.test")
+    }
+
+    func testRemovingOneSelectedSourcePreservesOtherSourcesAndAccount() {
+        let store = ProviderAccountsStore(defaults: makeScratchDefaults())
+        let profile = SelectedAccountProfile(family: "claude", path: "/Users/dev/.claude-work",
+                                             keychainLiteral: nil)
+        store.addSelectedProfile(profile)
+        store.reconcile(with: [ProviderAccountsStore.AccountObservation(
+            family: "claude", identityKey: "acct-a", label: nil,
+            sources: [
+                ProviderAccountSource(kind: .defaultHome, anchor: "/Users/dev/.claude", holdsDefaultSource: true),
+                ProviderAccountSource(kind: .selectedHome, anchor: profile.path, holdsDefaultSource: false),
+            ]
+        )])
+
+        store.removeSelectedProfile(family: "claude", path: profile.path)
+
+        XCTAssertTrue(store.selectedProfiles.isEmpty)
+        XCTAssertEqual(store.records[0].sources.map(\.kind), [.defaultHome])
+        XCTAssertFalse(store.records[0].removedTombstone)
+    }
+
+    func testRemovedAccountStaysTombstonedUntilExplicitAddAgain() {
+        let store = ProviderAccountsStore(defaults: makeScratchDefaults())
+        store.reconcile(with: [defaultHomeObservation(family: "codex", identityKey: "acct-a")])
+        store.removeAccount(id: "codex")
+        store.reconcile(with: [defaultHomeObservation(family: "codex", identityKey: "acct-a", label: "new")])
+
+        XCTAssertTrue(store.records[0].removedTombstone)
+        XCTAssertNil(store.records[0].label)
+        store.addAgain(id: "codex")
+        XCTAssertFalse(store.records[0].removedTombstone)
     }
 }

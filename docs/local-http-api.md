@@ -22,6 +22,12 @@ Matching is plain string comparison: an exact provider ID names that provider, a
 card. There is no aliasing or "pick the right account" logic; the same request always names the same
 providers.
 
+With multiple enabled Codex or Claude accounts, the envelope adds a `summaries` object keyed by
+`codex:summary` or `claude:summary`. Each entry has `displayName`, `incomplete`, and normalized `lines`
+for available-account counts and comparable totals. Existing `providers` entries stay per account.
+With multiple Codex accounts, spend lines in `codex:summary` combine local Codex logs. They are
+unattributed, so `incomplete` is true and no account receives that spend.
+
 - **200 OK** — limits envelope with every matched provider that has data (an `errors` entry appears
   when a refresh failed; a matched provider with no data yet simply has no entry).
 - **404 Not Found** — the ID names no known provider and no family.
@@ -36,6 +42,9 @@ the same iCloud-combined usage as the dashboard; `/v1/usage` returns the old UI-
 `/v1/limits` projects the data into stable resource IDs and raw scalar values.
 
 - **200 OK** — JSON array (may be empty `[]` if nothing has been fetched yet).
+
+With multiple enabled accounts, the array also has a snapshot whose `providerId` is
+`codex:summary` or `claude:summary`. Account snapshots retain their existing shape.
 
 ### `GET /v1/usage/:id`
 

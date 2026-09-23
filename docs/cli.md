@@ -23,6 +23,13 @@ card, so existing usage keeps working unchanged as multi-account support arrives
 contains every matched provider; an ID that names nothing exits with an error. There is no aliasing
 or account-picking logic.
 
+When at least two enabled accounts of one family are present, the envelope also has an explicit
+`summaries` entry such as `claude:summary`. The `providers` entries keep their existing per-account
+shape. The summary reports available-account counts and comparable numeric totals; it marks partial
+data with `incomplete: true`. See [Accounts](accounts.md).
+For multiple Codex accounts, the summary also shows combined estimated spend from local Codex logs.
+That spend is unattributed and does not appear under an individual account.
+
 ## Install on `PATH`
 
 In OpenUsage, open **Settings → Command Line** and click **Install…**. After the standard macOS

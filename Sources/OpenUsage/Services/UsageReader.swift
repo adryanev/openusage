@@ -52,14 +52,19 @@ public struct UsageReader {
                 _ = LoginShellEnvironment.shared.ensureCaptured()
             }.value
         }
+        let accountsStore = ProviderAccountsStore(defaults: defaults)
         let accountAssembly = providersOverride == nil
-            ? await ProviderAccountAssembly.make(defaults: defaults, waitsForLoginShell: false)
+            ? await ProviderAccountAssembly.make(defaults: defaults, accountsStore: accountsStore, waitsForLoginShell: false)
             : ProviderAccountAssembly(identityKeysByCard: [:])
         let providers = providersOverride ?? ProviderCatalog.make(
             defaults: defaults,
             claudeCards: accountAssembly.claudeCards,
             codexCards: accountAssembly.codexCards,
-            claudeIdentityKeys: accountAssembly.identityKeysByCard
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
+            suppressedFamilies: Set(ProviderAccountID.families.filter { family in
+                let records = accountsStore.records.filter { $0.family == family }
+                return !records.isEmpty && records.allSatisfy(\.removedTombstone)
+            })
         )
         let registry = WidgetRegistry.from(providers)
         let knownIDs = Set(registry.providers.map(\.id))
@@ -131,12 +136,33 @@ public struct UsageReader {
                 .compactMap { id in errors[id].map { "\(id): \($0)" } }
         }
 
+        var sharedSpendLines: [String: [MetricLine]] = [:]
+        if providersOverride == nil,
+           accountAssembly.codexCards.count > 1,
+           enabledOrderedIDs.count(where: { ProviderAccountID.family(of: $0) == "codex" }) > 1 {
+            let history = CodexSharedHistoryStore(
+                additionalHomes: accountAssembly.codexCards[0].logHomes
+            )
+            await history.refresh()
+            sharedSpendLines["codex"] = history.lines
+        }
+        if providersOverride == nil,
+           accountAssembly.claudeCards.count > 1,
+           enabledOrderedIDs.contains(where: { ProviderAccountID.family(of: $0) == "claude" }) {
+            let history = ClaudeSharedHistoryStore(additionalConfigDirectories: Array(Set(
+                accountAssembly.claudeCards.flatMap(\.additionalLogDirectories)
+            )).sorted())
+            await history.refresh()
+            sharedSpendLines["claude"] = history.lines
+        }
         let state = LocalUsageAPI.State(
             enabledOrderedIDs: enabledOrderedIDs,
+            monitoredIDs: Set(orderedIDs.filter { enablement.isEnabled($0) }),
             knownIDs: knownIDs,
             snapshots: snapshots,
             limitDescriptors: registry.limitDescriptorsByProvider,
-            errors: errors
+            errors: errors,
+            sharedSpendLines: sharedSpendLines
         )
         let path = requestedToken.map { "/v1/limits/\($0)" } ?? "/v1/limits"
         let response = LocalUsageAPI.respond(method: "GET", path: path, state: state)

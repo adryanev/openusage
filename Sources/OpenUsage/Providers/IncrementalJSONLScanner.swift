@@ -13,7 +13,7 @@ enum JSONLScanning {
 
     /// Start of the day `daysBack` days before `now` — the lower bound of the scan window.
     static func sinceDate(daysBack: Int, now: Date) -> Date {
-        let shifted = Calendar.current.date(byAdding: .day, value: -daysBack, to: now) ?? now
+        let shifted = Calendar.current.date(byAdding: .day, value: -(max(daysBack, 1) - 1), to: now) ?? now
         return Calendar.current.startOfDay(for: shifted)
     }
 

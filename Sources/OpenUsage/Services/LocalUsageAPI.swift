@@ -11,6 +11,8 @@ enum LocalUsageAPI {
     struct State: Sendable {
         /// Provider IDs the collection endpoint serves: enablement-filtered, in the user's order.
         var enabledOrderedIDs: [String]
+        /// Optional active-card set when a direct CLI request also reads disabled cards.
+        var monitoredIDs: Set<String>? = nil
         /// Every provider the registry knows — single-provider lookups work for disabled ones too.
         var knownIDs: Set<String>
         /// The rendered snapshot set shared by both routes. `/v1/usage` and `/v1/limits` only differ
@@ -19,6 +21,7 @@ enum LocalUsageAPI {
         /// Only descriptors explicitly opted into the stable limits contract.
         var limitDescriptors: [String: [WidgetDescriptor]] = [:]
         var errors: [String: String] = [:]
+        var sharedSpendLines: [String: [MetricLine]] = [:]
         var generatedAt = Date()
 
         /// Every known card the request token names — an exact card id, or a family id naming all of
@@ -27,6 +30,18 @@ enum LocalUsageAPI {
         /// Empty means the token names nothing (404).
         func matchingCardIDs(for token: String) -> [String] {
             knownIDs.filter { $0 == token || ProviderAccountID.family(of: $0) == token }.sorted()
+        }
+
+        func summarySnapshots(for providerIDs: [String]) -> [ProviderSnapshot] {
+            ProviderAccountID.families.sorted().compactMap { family in
+                let ids = providerIDs.filter {
+                    ProviderAccountID.family(of: $0) == family
+                        && (monitoredIDs ?? Set(enabledOrderedIDs)).contains($0)
+                }
+                return ProviderAccountSummary.make(family: family, accountIDs: ids,
+                                                   snapshots: snapshots, errors: errors,
+                                                   sharedSpendLines: sharedSpendLines[family] ?? [])
+            }
         }
     }
 
@@ -68,6 +83,7 @@ enum LocalUsageAPI {
         case (2, "v1", "usage"):
             guard method == "GET" else { return error(405, "method_not_allowed") }
             let snapshots = state.enabledOrderedIDs.compactMap { state.snapshots[$0] }
+                + state.summarySnapshots(for: state.enabledOrderedIDs)
             return Response(status: 200, body: encode(snapshots.map(WireSnapshot.init)))
 
         case (3, "v1", "usage"):
@@ -79,6 +95,7 @@ enum LocalUsageAPI {
             let providerIDs = state.matchingCardIDs(for: segments[2])
             guard !providerIDs.isEmpty else { return error(404, "provider_not_found") }
             let snapshots = providerIDs.compactMap { state.snapshots[$0] }
+                + state.summarySnapshots(for: providerIDs)
             return Response(status: 200, body: encode(snapshots.map(WireSnapshot.init)))
 
         default:

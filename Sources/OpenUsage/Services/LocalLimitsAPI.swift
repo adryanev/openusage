@@ -20,10 +20,15 @@ enum LocalLimitsAPI {
         let errors = providerIDs.compactMap { providerID in
             state.errors[providerID].map { WireError(providerID: providerID, message: $0) }
         }
+        let summaries = Dictionary(uniqueKeysWithValues: state.summarySnapshots(for: providerIDs).map { snapshot in
+            (snapshot.providerID, WireSummary(displayName: snapshot.displayName,
+                                              incomplete: snapshot.warning != nil, lines: snapshot.lines))
+        })
         return encode(WireEnvelope(
             schema: schema,
             generatedAt: OpenUsageISO8601.string(from: state.generatedAt),
             providers: providers,
+            summaries: summaries,
             errors: errors
         ))
     }
@@ -38,7 +43,14 @@ enum LocalLimitsAPI {
         let schema: String
         let generatedAt: String
         let providers: [String: WireProvider]
+        let summaries: [String: WireSummary]
         let errors: [WireError]
+    }
+
+    private struct WireSummary: Encodable {
+        let displayName: String
+        let incomplete: Bool
+        let lines: [MetricLine]
     }
 
     private struct WireError: Encodable {

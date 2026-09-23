@@ -8,13 +8,14 @@ enum ProviderCatalog {
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         codexCards: [CodexAccountCard] = [],
-        claudeIdentityKeys: [String: String] = [:]
+        claudeIdentityKeys: [String: String] = [:],
+        suppressedFamilies: Set<String> = []
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
         // then every other provider alphabetically by display name.
         var providers: [ProviderRuntime]
         if claudeCards.isEmpty {
-            providers = [ClaudeProvider()]
+            providers = suppressedFamilies.contains("claude") ? [] : [ClaudeProvider()]
         } else {
             providers = claudeCards.map { card in
                 let identity = claudeIdentityKeys[card.id] ?? card.identityKey
@@ -34,20 +35,25 @@ enum ProviderCatalog {
                         expectedIdentityKey: identity,
                         desktopOnly: card.usesDesktopCredentials,
                         swapAccount: card.swapAccount,
+                        selectedProfiles: card.selectedProfiles,
+                        hasObservedSource: card.hasObservedSource,
                         preferOrganizationScopedDesktop: claudeCards.count > 1
                             && card.organizationID != nil && !card.usesDesktopCredentials
                     ),
                     logUsageScanner: scanner,
-                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
+                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage,
+                    usesCombinedSpend: claudeCards.count > 1
                 )
             }
         }
         if codexCards.isEmpty {
-            providers.append(CodexProvider())
+            if !suppressedFamilies.contains("codex") { providers.append(CodexProvider()) }
         } else {
             providers += codexCards.map { card in
                 CodexProvider(
-                    provider: CodexProvider.makeProvider(id: card.id, displayName: card.displayName),
+                    provider: CodexProvider.makeProvider(
+                        id: card.id, displayName: codexCards.count == 1 ? "Codex" : card.displayName
+                    ),
                     authStore: CodexAuthStore(expectedIdentity: card.identity, additionalAuthHomes: card.authHomes),
                     logUsageScanner: CodexLogUsageScanner(
                         allowsUnattributedHistory: card.allowsUnattributedHistory,

@@ -27,8 +27,17 @@ extension LayoutStore {
         !spendCapableProviders.isEmpty
     }
 
+    var hasCodexAccountSummary: Bool {
+        displayGroups.contains { ProviderAccountID.family(of: $0.provider.id) == "codex" }
+    }
+
+    var hasClaudeAccountSummary: Bool {
+        displayGroups.contains { ProviderAccountID.family(of: $0.provider.id) == "claude" }
+    }
+
     /// Enabled providers that ship the local spend tiles (`WidgetDescriptor.spendTiles`), in the
-    /// user's provider order — the exact set the Total Spend card aggregates. Deliberately *not*
+    /// user's provider order. The Total Spend card also includes shared Codex history when present.
+    /// Deliberately *not*
     /// `displayGroups`: a provider whose every metric is hidden in Customize still spends money and
     /// must still count, and look-alike dollar rows from other providers (OpenRouter's API-spend
     /// "Today") must not.

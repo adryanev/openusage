@@ -5,10 +5,11 @@ import SwiftUI
 /// (Today / Yesterday / Last 30 Days) over a donut ring whose segments are each provider's share of
 /// the selected metric, with the total in the center and a ranked legend beside it. The title is a
 /// pull-down menu for Cost / Cost/MTok / Tokens. Data comes from `TotalSpendAggregator` over
-/// the same snapshots the provider cards render. Shown whenever any enabled provider tracks spend
-/// (`LayoutStore.hasSpendCapableProvider`) and the toggle at the top of Settings is on; a period
+/// provider snapshots plus combined Codex history in multi-account mode. Shown whenever an enabled
+/// provider tracks spend and the toggle at the top of Settings is on; a period
 /// (or metric) with nothing to show uses a quiet empty state instead of hiding the card.
 struct TotalSpendCard: View {
+    @Environment(AppContainer.self) private var container
     @Environment(LayoutStore.self) private var layout
     @Environment(WidgetDataStore.self) private var dataStore
     @Environment(\.colorScheme) private var colorScheme
@@ -36,7 +37,11 @@ struct TotalSpendCard: View {
     }
 
     private var total: TotalSpend {
-        TotalSpendAggregator.total(for: period, providers: providers, snapshots: dataStore.snapshots)
+        TotalSpendAggregator.total(
+            for: period, providers: providers, snapshots: dataStore.snapshots,
+            codexSharedLines: layout.hasCodexAccountSummary ? container.codexSharedHistory?.lines : nil,
+            claudeSharedLines: layout.hasClaudeAccountSummary ? container.claudeSharedHistory?.lines : nil
+        )
     }
 
     private var projection: TotalSpendProjection {
@@ -104,7 +109,9 @@ struct TotalSpendCard: View {
     /// hardcoded list, so disabling a provider (or a new spend provider shipping) can't make the
     /// tooltip lie about what the total reflects.
     private var infoTooltip: String {
-        let names = providers.map(\.displayName)
+        var names = providers.map(\.displayName)
+        if layout.hasClaudeAccountSummary, container.claudeSharedHistory != nil { names.append("Claude") }
+        if layout.hasCodexAccountSummary, container.codexSharedHistory != nil { names.append("Codex") }
         return "Only includes \(names.formatted(.list(type: .and)))."
     }
 

@@ -33,7 +33,8 @@ enum LayoutBootstrap {
     static func load(
         registry: WidgetRegistry,
         persistence: LayoutPersistence,
-        defaults: LayoutDefaultSet
+        defaults: LayoutDefaultSet,
+        isProviderEnabled: (String) -> Bool = { _ in true }
     ) -> LayoutInitialState {
         let hasStoredLayout = persistence.hasStoredLayout
         let savedPlaced = persistence.loadPlaced()?.filter { registry.descriptor(id: $0.descriptorID) != nil }
@@ -54,10 +55,21 @@ enum LayoutBootstrap {
         } ?? LayoutOrdering.defaultMetricOrder(registry: registry)
 
         // An existing value — including an empty array from a user who unpinned everything — wins.
-        let pinnedMetricIDs = Set(
-            (persistence.loadPins() ?? defaults.pinnedMetricIDs)
-                .filter { registry.descriptor(id: $0) != nil }
-        )
+        let pinnedMetricIDs = Set((persistence.loadPins() ?? defaults.pinnedMetricIDs).compactMap { id in
+            if let descriptor = registry.descriptor(id: id),
+               isProviderEnabled(descriptor.providerID)
+                   || !ProviderAccountID.families.contains(descriptor.providerID) { return id }
+            // A single-account pin may outlive the original provider ID when account discovery
+            // introduces scoped cards. A disabled base card can still be in the registry, so
+            // old pins follow the first enabled account. Scoped manual pins stay on their card.
+            let parts = id.split(separator: ".", maxSplits: 1)
+            guard parts.count == 2, ProviderAccountID.families.contains(String(parts[0])),
+                  let account = registry.providers.first(where: {
+                      ProviderAccountID.family(of: $0.id) == parts[0] && isProviderEnabled($0.id)
+                  }) else { return registry.descriptor(id: id) == nil ? nil : id }
+            let replacement = "\(account.id).\(parts[1])"
+            return registry.descriptor(id: replacement) == nil ? nil : replacement
+        })
 
         // Expanded membership is a fresh-install default only. Existing layouts that predate the feature
         // keep every familiar metric above the caret unless the user later moves one.

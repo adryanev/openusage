@@ -30,6 +30,13 @@ struct CustomizeProviderDetailView: View {
             VStack(alignment: .leading, spacing: density.sectionSpacing) {
                 metricSections(group)
                     .simultaneousGesture(metricDragGesture())
+                let family = ProviderAccountID.family(of: providerID)
+                if (family == "codex" || family == "claude"),
+                   container.accountsStore.records.count(where: {
+                       $0.family == family && !$0.removedTombstone
+                   }) > 1 {
+                    combinedUsageSection(family: family)
+                }
                 if let keyProvider = container.apiKeyProviders.first(where: { $0.provider.id == providerID }) {
                     APIKeysSection(provider: keyProvider)
                 }
@@ -42,6 +49,49 @@ struct CustomizeProviderDetailView: View {
         } else {
             // Unknown provider — L1 only lists known providers, so this is unreachable in practice.
             EmptyView()
+        }
+    }
+
+    private func combinedUsageSection(family: String) -> some View {
+        let labels = ["Usage Trend", "Today", "Yesterday", "Last 30 Days"]
+        return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
+            Text("Combined Usage")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+            VStack(spacing: 0) {
+                ForEach(labels, id: \.self) { label in
+                    let id = "\(family):summary.\(label)"
+                    HStack(spacing: 12) {
+                        Text(label)
+                        Spacer()
+                        if label != "Usage Trend" {
+                            Button {
+                                container.summaryPins.setPinned(!container.summaryPins.isPinned(id), for: id)
+                            } label: {
+                                Image(systemName: container.summaryPins.isPinned(id) ? "star.fill" : "star")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .frame(width: 18, height: 18)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(container.summaryPins.isPinned(id) ? Color.accentColor : Color.secondary)
+                            .accessibilityLabel(container.summaryPins.isPinned(id) ? "Remove From Menu Bar" : "Pin To Menu Bar")
+                        }
+                        Toggle("", isOn: Binding(
+                            get: { container.summaryPins.isEnabled(id) },
+                            set: { container.summaryPins.setEnabled($0, for: id) }
+                        ))
+                        .settingsSwitchStyle()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+            }
+            .cardSurface()
+            Text("Spend and trend include all \(family.capitalized) accounts on this Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
         }
     }
 

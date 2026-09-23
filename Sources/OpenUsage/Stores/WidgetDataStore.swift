@@ -370,6 +370,10 @@ final class WidgetDataStore {
             )
             AppLog.debug(.refresh, "preserved last-good history for \(providerID) after scan miss")
         }
+        snapshot = AccountHistoryDeletion.apply(
+            to: snapshot, cutoff: AccountHistoryDeletion.cutoff(for: providerID, defaults: defaults),
+            descriptor: registry.historyDescriptorsByProvider[providerID], now: now()
+        )
         localSnapshots[providerID] = snapshot
         // Stamp the write with the card's launch-resolved account identity; nil (no stamp) for
         // non-account providers and for cards whose identity didn't resolve this launch.

@@ -102,6 +102,7 @@ final class LocalUsageAPITests: XCTestCase {
         var state = makeState()
         let refreshedAt = OpenUsageISO8601.date(from: "2026-03-26T11:16:29.000Z")!
         state.knownIDs.insert("claude@ab12cd34")
+        state.enabledOrderedIDs.append("claude@ab12cd34")
         state.snapshots["claude@ab12cd34"] = ProviderSnapshot(
             providerID: "claude@ab12cd34",
             displayName: "Claude",
@@ -112,7 +113,8 @@ final class LocalUsageAPITests: XCTestCase {
         let family = LocalUsageAPI.respond(method: "GET", path: "/v1/usage/claude", state: state)
         XCTAssertEqual(family.status, 200)
         let matched = try XCTUnwrap(try json(family.body) as? [[String: Any]])
-        XCTAssertEqual(matched.compactMap { $0["providerId"] as? String }, ["claude", "claude@ab12cd34"])
+        XCTAssertEqual(matched.compactMap { $0["providerId"] as? String },
+                       ["claude", "claude@ab12cd34", "claude:summary"])
 
         // The exact card id names just that card.
         let exact = LocalUsageAPI.respond(method: "GET", path: "/v1/usage/claude@ab12cd34", state: state)

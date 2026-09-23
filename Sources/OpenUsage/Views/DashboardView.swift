@@ -100,8 +100,11 @@ struct DashboardView: View {
                     onEscape: {
                         // From a provider's L2 detail, back out to the L1 list first; only from L1 /
                         // Settings drop to the dashboard. Pressing Esc again from L1 closes the popover.
-                        if layout.customizeProviderID != nil {
-                            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+                        if layout.customizeProviderID != nil || layout.customizeAccounts {
+                            withAnimation(Motion.spring) {
+                                layout.customizeProviderID = nil
+                                layout.customizeAccounts = false
+                            }
                             return true
                         }
                         guard layout.screen != .dashboard else { return false }
@@ -111,8 +114,11 @@ struct DashboardView: View {
                     onReturn: {
                         // From a provider's L2 detail, back out to the L1 list first — matching Esc —
                         // so Return steps L2 → L1 → dashboard instead of jumping L2 → dashboard.
-                        if layout.customizeProviderID != nil {
-                            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+                        if layout.customizeProviderID != nil || layout.customizeAccounts {
+                            withAnimation(Motion.spring) {
+                                layout.customizeProviderID = nil
+                                layout.customizeAccounts = false
+                            }
                             return true
                         }
                         let target: PopoverScreen = layout.screen == .dashboard ? .customize : .dashboard
@@ -169,7 +175,8 @@ struct DashboardView: View {
             // dashboard or into a provider's L2 detail — unmounts that host, which dismisses the alert
             // but leaves `isPresentingResetAllConfirm` `true`. Drop it whenever L1 stops being visible
             // so the destructive confirmation can't reappear stale on return without a fresh tap.
-            .onChange(of: layout.screen == .customize && layout.customizeProviderID == nil) { _, isL1Visible in
+            .onChange(of: layout.screen == .customize && layout.customizeProviderID == nil
+                && !layout.customizeAccounts) { _, isL1Visible in
                 if !isL1Visible { isPresentingResetAllConfirm = false }
             }
             // Each screen switch: pin to the outgoing screen for one render (`slideProgress = 0`),
@@ -433,6 +440,7 @@ struct DashboardView: View {
                         horizontalPadding: Self.footerHorizontalPadding,
                         onResetAll: {
                             layout.resetToDefault()
+                            container.summaryPins.reset()
                             container.reseedEnabledProviders()
                         },
                         isPresentingResetAllConfirm: $isPresentingResetAllConfirm

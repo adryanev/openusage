@@ -7,6 +7,11 @@ import Observation
 @MainActor
 @Observable
 final class AppContainer {
+    let accountsStore: ProviderAccountsStore
+    let summaryPins: ProviderSummaryPinStore
+    let accountInventory: AccountInventoryMonitor
+    let codexSharedHistory: CodexSharedHistoryStore?
+    let claudeSharedHistory: ClaudeSharedHistoryStore?
     let registry: WidgetRegistry
     let layout: LayoutStore
     let dataStore: WidgetDataStore
@@ -68,12 +73,26 @@ final class AppContainer {
         self.shellEnvironmentSnapshotTask = ShellEnvironmentSnapshotStore(defaults: .standard).startRefreshTask()
         // The launch account pass: which account is signed in at each family's default home. Feeds
         // the snapshot cache's account stamp and reconciles the account registry.
-        let accountAssembly = await ProviderAccountAssembly.make(waitsForLoginShell: true)
+        let accountsStore = ProviderAccountsStore()
+        let accountAssembly = await ProviderAccountAssembly.make(
+            accountsStore: accountsStore, waitsForLoginShell: true
+        )
+        let accountInventory = AccountInventoryMonitor(accountsStore: accountsStore, current: accountAssembly)
+        let codexSharedHistory = accountAssembly.codexCards.count > 1
+            ? CodexSharedHistoryStore(additionalHomes: accountAssembly.codexCards[0].logHomes) : nil
+        let claudeSharedHistory = accountAssembly.claudeCards.count > 1
+            ? ClaudeSharedHistoryStore(additionalConfigDirectories: Array(Set(
+                accountAssembly.claudeCards.flatMap(\.additionalLogDirectories)
+            )).sorted()) : nil
 
         let providers = ProviderCatalog.make(
             claudeCards: accountAssembly.claudeCards,
             codexCards: accountAssembly.codexCards,
-            claudeIdentityKeys: accountAssembly.identityKeysByCard
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
+            suppressedFamilies: Set(ProviderAccountID.families.filter { family in
+                let records = accountsStore.records.filter { $0.family == family }
+                return !records.isEmpty && records.allSatisfy(\.removedTombstone)
+            })
         )
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
@@ -85,7 +104,7 @@ final class AppContainer {
         let layout = LayoutStore(
             registry: registry,
             defaultMetricIDs: accountDefaults(DefaultLayout.metricIDs),
-            defaultPinnedMetricIDs: accountDefaults(DefaultLayout.pinnedMetricIDs),
+            defaultPinnedMetricIDs: DefaultLayout.pinnedMetricIDs,
             defaultExpandedMetricIDs: accountDefaults(DefaultLayout.expandedMetricIDs),
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) }
         )
@@ -122,6 +141,11 @@ final class AppContainer {
             enablement: enablement
         )
         self.providers = providers
+        self.accountsStore = accountsStore
+        self.summaryPins = ProviderSummaryPinStore()
+        self.accountInventory = accountInventory
+        self.codexSharedHistory = codexSharedHistory
+        self.claudeSharedHistory = claudeSharedHistory
         self.onboarding = onboarding
         self.registry = registry
         self.enablement = enablement
@@ -205,16 +229,24 @@ final class AppContainer {
         self.telemetry = telemetry
         self.transparency = PopoverTransparencyStore()
         self.privacy = MenuBarPrivacyStore()
-        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore] in
+        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore, codexSharedHistory, claudeSharedHistory] in
             LocalUsageAPI.State(
                 enabledOrderedIDs: layout.orderedProviderIDs().filter { enablement.isEnabled($0) },
                 knownIDs: Set(registry.providers.map(\.id)),
                 snapshots: dataStore.snapshots,
                 limitDescriptors: registry.limitDescriptorsByProvider,
-                errors: dataStore.providerErrors
+                errors: dataStore.providerErrors,
+                sharedSpendLines: [
+                    "codex": codexSharedHistory?.lines,
+                    "claude": claudeSharedHistory?.lines
+                ].compactMapValues { $0 }
             )
         })
-        self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
+        self.refreshTask = Self.startPeriodicRefresh(
+            dataStore: dataStore, telemetry: telemetry, accountInventory: accountInventory,
+            codexSharedHistory: codexSharedHistory,
+            claudeSharedHistory: claudeSharedHistory
+        )
         localAPI.start()
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
@@ -227,6 +259,13 @@ final class AppContainer {
         seedTask?.cancel()
         newProviderTask?.cancel()
         shellEnvironmentSnapshotTask.cancel()
+    }
+
+    func stopForAccountReload() {
+        refreshTask.cancel()
+        seedTask?.cancel()
+        newProviderTask?.cancel()
+        localAPI.stop()
     }
 
     /// Re-runs first-launch credential detection on demand — the enablement half of the Customize
@@ -247,6 +286,7 @@ final class AppContainer {
     /// screen resets those alongside this call.
     func resetAllSettings() {
         layout.resetToDefault()
+        summaryPins.reset()
         // The menu-bar Icon Style is a Settings preference, not part of the Customize layout reset.
         layout.menuBarStyle = .text
         reseedEnabledProviders()
@@ -290,11 +330,17 @@ final class AppContainer {
     /// Sparkle's update bookkeeping, and unrelated global-domain changes from other processes. Waking on
     /// that, with no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a
     /// refresh storm.
-    private static func startPeriodicRefresh(dataStore: WidgetDataStore, telemetry: TelemetryRecorder) -> Task<Void, Never> {
+    private static func startPeriodicRefresh(
+        dataStore: WidgetDataStore, telemetry: TelemetryRecorder,
+        accountInventory: AccountInventoryMonitor, codexSharedHistory: CodexSharedHistoryStore?,
+        claudeSharedHistory: ClaudeSharedHistoryStore?
+    ) -> Task<Void, Never> {
         Task {
             let wakeSignal = RefreshWakeSignal()
             while !Task.isCancelled {
                 await dataStore.refreshAll()
+                await codexSharedHistory?.refresh()
+                await claudeSharedHistory?.refresh()
                 // Re-evaluate quota pace milestones every tick — after the refresh so it sees fresh data,
                 // and on every loop (not just on a fetch) so pace worsening from elapsed time alone still
                 // alerts even with the popover closed.
@@ -303,6 +349,7 @@ final class AppContainer {
                 // prior-day provider rollups only while optional analytics are on. Runs on launch
                 // and every interval, so always-running instances still produce a daily-active signal.
                 telemetry.tick()
+                await accountInventory.detectChange()
                 await wakeSignal.waitForWake(timeout: RefreshSetting.interval)
             }
         }

@@ -51,7 +51,10 @@ struct CustomizeView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let id = layout.customizeProviderID {
+        if layout.customizeAccounts {
+            CustomizeAccountsView()
+                .transition(.move(edge: .trailing))
+        } else if let id = layout.customizeProviderID {
             CustomizeProviderDetailView(
                 providerID: id,
                 reorderSpaceName: reorderSpaceName,

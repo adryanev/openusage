@@ -270,9 +270,9 @@ final class CodexSwapAccountTests: XCTestCase {
         let initial = await assembly(files, store: store)
         files.files.removeValue(forKey: "/test/.local/share/codex-swap/accounts.json")
         let next = await assembly(files, store: store)
-        XCTAssertEqual(next.codexCards.count, 1)
+        XCTAssertEqual(next.codexCards.count, 2)
         XCTAssertEqual(next.codexCards.first?.id, initial.codexCards.first { $0.identity == a }?.id)
-        XCTAssertEqual(next.codexCards.first?.allowsUnattributedHistory, false)
+        XCTAssertTrue(next.codexCards.allSatisfy { !$0.allowsUnattributedHistory })
     }
 
     func testResetCreditServiceNeverConsumesAnotherAccountsCredit() async {
