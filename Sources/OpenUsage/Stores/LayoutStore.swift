@@ -140,7 +140,8 @@ final class LayoutStore {
                 migrationBaselineMetricIDs: migrationBaselineMetricIDs,
                 pinnedMetricIDs: defaultPinnedMetricIDs,
                 expandedMetricIDs: defaultExpandedMetricIDs
-            )
+            ),
+            isProviderEnabled: isProviderEnabled
         )
         placed = initial.placed
         providerOrder = initial.providerOrder

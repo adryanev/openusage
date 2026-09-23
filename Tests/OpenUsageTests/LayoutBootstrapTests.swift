@@ -74,6 +74,32 @@ final class LayoutBootstrapTests: XCTestCase {
         XCTAssertTrue(userUnpinned.pinnedMetricIDs.isEmpty)
     }
 
+    func testDefaultAndSavedBasePinsFollowFirstEnabledAccount() {
+        let registry = WidgetRegistry.from([
+            ClaudeProvider(),
+            ClaudeProvider(provider: ClaudeProvider.makeProvider(id: "claude@first", displayName: "Claude: First"))
+        ])
+        let (persistence, _) = makePersistence("DisabledBasePins")
+        let defaults = LayoutDefaultSet(
+            metricIDs: [], migrationBaselineMetricIDs: [],
+            pinnedMetricIDs: ["claude.session"], expandedMetricIDs: []
+        )
+        let enabled: (String) -> Bool = { $0 != "claude" }
+
+        let initial = LayoutBootstrap.load(
+            registry: registry, persistence: persistence, defaults: defaults,
+            isProviderEnabled: enabled
+        )
+        XCTAssertEqual(initial.pinnedMetricIDs, ["claude@first.session"])
+
+        persistence.savePins(["claude.session"])
+        let explicit = LayoutBootstrap.load(
+            registry: registry, persistence: persistence, defaults: defaults,
+            isProviderEnabled: enabled
+        )
+        XCTAssertEqual(explicit.pinnedMetricIDs, ["claude@first.session"])
+    }
+
     private func makeDefaultSet() -> LayoutDefaultSet {
         LayoutDefaultSet(
             metricIDs: ["claude.session", "claude.weekly"],
