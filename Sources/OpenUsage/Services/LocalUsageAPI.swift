@@ -21,6 +21,7 @@ enum LocalUsageAPI {
         /// Only descriptors explicitly opted into the stable limits contract.
         var limitDescriptors: [String: [WidgetDescriptor]] = [:]
         var errors: [String: String] = [:]
+        var sharedSpendLines: [String: [MetricLine]] = [:]
         var generatedAt = Date()
 
         /// Every known card the request token names — an exact card id, or a family id naming all of
@@ -38,7 +39,8 @@ enum LocalUsageAPI {
                         && (monitoredIDs ?? Set(enabledOrderedIDs)).contains($0)
                 }
                 return ProviderAccountSummary.make(family: family, accountIDs: ids,
-                                                   snapshots: snapshots, errors: errors)
+                                                   snapshots: snapshots, errors: errors,
+                                                   sharedSpendLines: sharedSpendLines[family] ?? [])
             }
         }
     }

@@ -44,6 +44,23 @@ final class ProviderAccountSummaryTests: XCTestCase {
         XCTAssertNil(reset)
     }
 
+    func testCodexSummaryShowsCombinedUnattributedSpendOnlyOnce() throws {
+        let first = snapshot("codex", session: 20, weekly: 30, today: 2, tokens: 10)
+        let second = snapshot("codex@second", session: 40, weekly: 50, today: 3, tokens: 20)
+        let shared: [MetricLine] = [
+            .values(label: "Today", values: [MetricValue(number: 4, kind: .dollars)]),
+            .values(label: "Last 30 Days", values: [MetricValue(number: 12, kind: .dollars)]),
+        ]
+        let summary = try XCTUnwrap(ProviderAccountSummary.make(
+            family: "codex", accountIDs: [first.providerID, second.providerID],
+            snapshots: [first.providerID: first, second.providerID: second],
+            sharedSpendLines: shared
+        ))
+        XCTAssertEqual(values(summary.line(label: "Today"))?.first?.number, 4)
+        XCTAssertEqual(values(summary.line(label: "Last 30 Days"))?.first?.number, 12)
+        XCTAssertTrue(summary.warning?.contains("combined") == true)
+    }
+
     private func values(_ line: MetricLine?) -> [MetricValue]? {
         guard case .values(_, let values, _, _, _, _)? = line else { return nil }
         return values

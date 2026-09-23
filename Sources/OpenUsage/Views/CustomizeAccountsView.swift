@@ -50,7 +50,8 @@ struct CustomizeAccountsView: View {
             }
             if let summary = ProviderAccountSummary.make(
                 family: family, accountIDs: activeIDs,
-                snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors
+                snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors,
+                sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
             ) {
                 DisclosureGroup("Provider Summary") {
                     ForEach(summary.lines, id: \.label) { line in
@@ -118,12 +119,12 @@ struct CustomizeAccountsView: View {
             HStack {
                 Text(record.alias ?? record.label ?? record.id).fontWeight(.semibold)
                 Spacer()
-                Button { accounts.moveAccount(id: record.id, by: -1); container.accountInventory.requestReload() } label: {
+                Button { accounts.moveAccount(id: record.id, by: -1) } label: {
                     Image(systemName: "arrow.up")
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Move Account Up")
-                Button { accounts.moveAccount(id: record.id, by: 1); container.accountInventory.requestReload() } label: {
+                Button { accounts.moveAccount(id: record.id, by: 1) } label: {
                     Image(systemName: "arrow.down")
                 }
                 .buttonStyle(.plain)
@@ -177,7 +178,6 @@ struct CustomizeAccountsView: View {
 
     private func saveAlias(_ record: ProviderAccountRecord) {
         accounts.setAlias(aliases[record.id], for: record.id)
-        container.accountInventory.requestReload()
     }
 
     private func chooseProfile(for family: String) {

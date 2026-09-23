@@ -61,7 +61,7 @@ struct CustomizeProviderListView: View {
 
     private func providerRow(_ row: ProviderRow) -> some View {
         ProviderListRow(
-            provider: row.provider,
+            provider: container.accountsStore.displayProvider(row.provider),
             isEnabled: row.isEnabled,
             metricCount: row.metricCount,
             // The grip leads the tappable bar; a tap opens L2, a drag reorders. Drag-reorder is enabled

@@ -27,6 +27,8 @@ When at least two enabled accounts of one family are present, the envelope also 
 `summaries` entry such as `claude:summary`. The `providers` entries keep their existing per-account
 shape. The summary reports available-account counts and comparable numeric totals; it marks partial
 data with `incomplete: true`. See [Accounts](accounts.md).
+For multiple Codex accounts, the summary also shows combined estimated spend from local Codex logs.
+That spend is unattributed and does not appear under an individual account.
 
 ## Install on `PATH`
 

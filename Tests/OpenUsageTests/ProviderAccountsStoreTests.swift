@@ -141,6 +141,26 @@ final class ProviderAccountsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.records.first?.identityKey, "acct-a")
     }
 
+    func testDisplayNameUpdatesWithoutRebuildingAProvider() {
+        let defaults = makeScratchDefaults()
+        let store = ProviderAccountsStore(defaults: defaults)
+        store.reconcile(with: [defaultHomeObservation(
+            family: "codex", identityKey: "workspace|user@example.test", label: "user@example.test"
+        )])
+        let original = "Codex: Workspace 123 (user@example.test)"
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), original)
+        store.setAlias("Work", for: "codex")
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), "Codex: Work")
+        store.setAlias(nil, for: "codex")
+        XCTAssertEqual(store.displayName(for: "codex", fallback: original), original)
+
+        store.setAlias("Work", for: "codex")
+        let relaunched = ProviderAccountsStore(defaults: defaults)
+        relaunched.setAlias(nil, for: "codex")
+        XCTAssertEqual(relaunched.displayName(for: "codex", fallback: "Codex: Work"),
+                       "Codex: user@example.test")
+    }
+
     func testRemovingOneSelectedSourcePreservesOtherSourcesAndAccount() {
         let store = ProviderAccountsStore(defaults: makeScratchDefaults())
         let profile = SelectedAccountProfile(family: "claude", path: "/Users/dev/.claude-work",

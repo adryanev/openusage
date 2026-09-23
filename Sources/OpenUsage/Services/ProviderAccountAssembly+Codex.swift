@@ -3,7 +3,7 @@ import Foundation
 struct CodexAccountCard: Equatable, Sendable {
     let id: String
     let identity: CodexAccountIdentity
-    let displayName: String
+    var displayName: String
     let authHomes: [String]
     let logHomes: [String]
     let allowsUnattributedHistory: Bool

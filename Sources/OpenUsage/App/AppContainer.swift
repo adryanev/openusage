@@ -10,6 +10,7 @@ final class AppContainer {
     let accountsStore: ProviderAccountsStore
     let summaryPins: ProviderSummaryPinStore
     let accountInventory: AccountInventoryMonitor
+    let codexSharedHistory: CodexSharedHistoryStore?
     let registry: WidgetRegistry
     let layout: LayoutStore
     let dataStore: WidgetDataStore
@@ -76,6 +77,8 @@ final class AppContainer {
             accountsStore: accountsStore, waitsForLoginShell: true
         )
         let accountInventory = AccountInventoryMonitor(accountsStore: accountsStore, current: accountAssembly)
+        let codexSharedHistory = accountAssembly.codexCards.count > 1
+            ? CodexSharedHistoryStore(additionalHomes: accountAssembly.codexCards[0].logHomes) : nil
 
         let providers = ProviderCatalog.make(
             claudeCards: accountAssembly.claudeCards,
@@ -136,6 +139,7 @@ final class AppContainer {
         self.accountsStore = accountsStore
         self.summaryPins = ProviderSummaryPinStore()
         self.accountInventory = accountInventory
+        self.codexSharedHistory = codexSharedHistory
         self.onboarding = onboarding
         self.registry = registry
         self.enablement = enablement
@@ -219,17 +223,19 @@ final class AppContainer {
         self.telemetry = telemetry
         self.transparency = PopoverTransparencyStore()
         self.privacy = MenuBarPrivacyStore()
-        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore] in
+        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore, codexSharedHistory] in
             LocalUsageAPI.State(
                 enabledOrderedIDs: layout.orderedProviderIDs().filter { enablement.isEnabled($0) },
                 knownIDs: Set(registry.providers.map(\.id)),
                 snapshots: dataStore.snapshots,
                 limitDescriptors: registry.limitDescriptorsByProvider,
-                errors: dataStore.providerErrors
+                errors: dataStore.providerErrors,
+                sharedSpendLines: codexSharedHistory.map { ["codex": $0.lines] } ?? [:]
             )
         })
         self.refreshTask = Self.startPeriodicRefresh(
-            dataStore: dataStore, telemetry: telemetry, accountInventory: accountInventory
+            dataStore: dataStore, telemetry: telemetry, accountInventory: accountInventory,
+            codexSharedHistory: codexSharedHistory
         )
         localAPI.start()
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
@@ -316,12 +322,13 @@ final class AppContainer {
     /// refresh storm.
     private static func startPeriodicRefresh(
         dataStore: WidgetDataStore, telemetry: TelemetryRecorder,
-        accountInventory: AccountInventoryMonitor
+        accountInventory: AccountInventoryMonitor, codexSharedHistory: CodexSharedHistoryStore?
     ) -> Task<Void, Never> {
         Task {
             let wakeSignal = RefreshWakeSignal()
             while !Task.isCancelled {
                 await dataStore.refreshAll()
+                await codexSharedHistory?.refresh()
                 // Re-evaluate quota pace milestones every tick — after the refresh so it sees fresh data,
                 // and on every loop (not just on a fetch) so pace worsening from elapsed time alone still
                 // alerts even with the popover closed.

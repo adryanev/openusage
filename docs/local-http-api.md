@@ -25,6 +25,8 @@ providers.
 With multiple enabled Codex or Claude accounts, the envelope adds a `summaries` object keyed by
 `codex:summary` or `claude:summary`. Each entry has `displayName`, `incomplete`, and normalized `lines`
 for available-account counts and comparable totals. Existing `providers` entries stay per account.
+With multiple Codex accounts, spend lines in `codex:summary` combine local Codex logs. They are
+unattributed, so `incomplete` is true and no account receives that spend.
 
 - **200 OK** — limits envelope with every matched provider that has data (an `errors` entry appears
   when a refresh failed; a matched provider with no data yet simply has no entry).

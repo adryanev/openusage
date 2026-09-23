@@ -3,13 +3,17 @@ import Foundation
 /// A separate, explicit read model. Percent limits are counted by availability; they are never
 /// added because the provider APIs do not reveal the underlying quota capacity.
 enum ProviderAccountSummary {
-    static func make(family: String, accountIDs: [String], snapshots: [String: ProviderSnapshot],
-                     errors: [String: String] = [:]) -> ProviderSnapshot? {
+    static func make(
+        family: String, accountIDs: [String], snapshots: [String: ProviderSnapshot],
+        errors: [String: String] = [:], sharedSpendLines: [MetricLine] = []
+    ) -> ProviderSnapshot? {
         guard accountIDs.count > 1 else { return nil }
         let available = accountIDs.compactMap { snapshots[$0] }
         let incomplete = available.count != accountIDs.count
             || accountIDs.contains { errors[$0] != nil || snapshots[$0]?.lines.contains(where: \.isError) == true }
-            || available.contains { $0.line(label: "Today") == nil || $0.line(label: "Last 30 Days") == nil }
+            || (sharedSpendLines.isEmpty && available.contains {
+                $0.line(label: "Today") == nil || $0.line(label: "Last 30 Days") == nil
+            })
         var lines: [MetricLine] = []
         for label in ["Session", "Weekly"] {
             let count = available.filter { snapshot in
@@ -22,25 +26,34 @@ enum ProviderAccountSummary {
             ]))
         }
         for label in ["Today", "Last 30 Days"] {
-            if let line = combinedValues(label: label, snapshots: available) { lines.append(line) }
+            if let line = sharedSpendLines.first(where: { $0.label == label })
+                ?? combinedValues(label: label, snapshots: available) { lines.append(line) }
         }
         let primary = Set(["Session", "Weekly", "Today", "Last 30 Days"])
-        let optionalLabels = Set(available.flatMap { $0.lines.map(\.label) }).subtracting(primary)
+        let optionalLabels = Set(available.flatMap { $0.lines.map(\.label) }
+            + sharedSpendLines.map(\.label)).subtracting(primary)
         for label in optionalLabels.sorted() {
-            if let line = combinedValues(label: label, snapshots: available)
+            if let line = sharedSpendLines.first(where: { $0.label == label })
+                ?? combinedValues(label: label, snapshots: available)
                 ?? combinedProgress(label: label, snapshots: available)
                 ?? combinedChart(label: label, snapshots: available) {
                 lines.append(line)
             }
         }
         let missingOptional = optionalLabels.contains { label in
-            available.contains { $0.line(label: label) == nil }
+            sharedSpendLines.contains(where: { $0.label == label }) ? false
+                : available.contains { $0.line(label: label) == nil }
         }
-        let warning = incomplete || missingOptional
-            ? "Totals incomplete: one or more accounts have no current data." : nil
+        var warnings: [String] = []
+        if !sharedSpendLines.isEmpty {
+            warnings.append("Codex spend is combined from local logs; account ownership is unavailable.")
+        }
+        if incomplete || missingOptional {
+            warnings.append("Totals incomplete: one or more accounts have no current data.")
+        }
         return ProviderSnapshot(providerID: "\(family):summary", displayName: "\(family.capitalized) Summary",
                                 lines: lines, refreshedAt: available.map(\.refreshedAt).min() ?? Date(),
-                                warning: warning)
+                                warning: warnings.isEmpty ? nil : warnings.joined(separator: " "))
     }
 
     private static func combinedValues(label: String, snapshots: [ProviderSnapshot]) -> MetricLine? {

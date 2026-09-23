@@ -52,7 +52,8 @@ struct WidgetGroupedListView: View {
         let sorted = groups.sorted { (order.firstIndex(of: $0.provider.id) ?? Int.max) < (order.firstIndex(of: $1.provider.id) ?? Int.max) }
         let summary = ProviderAccountSummary.make(
             family: family, accountIDs: sorted.map { $0.provider.id },
-            snapshots: dataStore.snapshots, errors: dataStore.providerErrors
+            snapshots: dataStore.snapshots, errors: dataStore.providerErrors,
+            sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
         )
         return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
             Text(family.capitalized).font(.headline).padding(.horizontal, 8)
@@ -62,7 +63,9 @@ struct WidgetGroupedListView: View {
             ForEach(sorted) { group in
                 VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
                     HStack {
-                        Text(group.provider.displayName).font(.subheadline).fontWeight(.semibold)
+                        Text(container.accountsStore.displayName(
+                            for: group.provider.id, fallback: group.provider.displayName
+                        )).font(.subheadline).fontWeight(.semibold)
                         Spacer()
                         if let notice = dataStore.headerNotice(for: group.provider.id) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -156,8 +159,9 @@ struct WidgetGroupedListView: View {
     }
 
     private func header(_ group: ProviderGroup) -> some View {
-        ProviderSectionHeader(
-            provider: group.provider,
+        let displayed = container.accountsStore.displayProvider(group.provider)
+        return ProviderSectionHeader(
+            provider: displayed,
             plan: dataStore.plan(for: group.provider.id),
             warning: dataStore.headerNotice(for: group.provider.id),
             refreshing: dataStore.refreshingProviderIDs.contains(group.provider.id),
@@ -170,11 +174,11 @@ struct WidgetGroupedListView: View {
         .contextMenu {
             // Hides the whole provider section (the Customize provider list brings it back). Mirrors
             // the per-metric "Hide" but one level up, so the verb order reads the same on a header as a row.
-            Button("Hide \(group.provider.displayName)") {
+            Button("Hide \(displayed.displayName)") {
                 container.enablement.setEnabled(false, for: group.provider.id)
             }
             Divider()
-            Button("Refresh \(group.provider.displayName)") {
+            Button("Refresh \(displayed.displayName)") {
                 Task { await dataStore.refresh(providerID: group.provider.id, force: true) }
             }
             Button("Customize…") {

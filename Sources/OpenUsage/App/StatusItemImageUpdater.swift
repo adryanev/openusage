@@ -77,7 +77,8 @@ final class StatusItemImageUpdater {
             guard let first = accountIDs.first, let provider = container.layout.provider(id: first),
                   let snapshot = ProviderAccountSummary.make(
                     family: family, accountIDs: accountIDs,
-                    snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors
+                    snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors,
+                    sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
                   ) else { return nil }
             let metrics = snapshot.lines.compactMap { line -> MenuBarContent.Metric? in
                 let id = "\(family):summary.\(line.label)"
@@ -106,7 +107,15 @@ final class StatusItemImageUpdater {
                                         displayName: "\(family.capitalized) Summary",
                                         icon: provider.icon, metrics: metrics)
         }
-        let groups = base.groups + summaryGroups
+        let groups = base.groups.map { group in
+            MenuBarContent.Group(
+                providerID: group.providerID,
+                displayName: container.accountsStore.displayName(
+                    for: group.providerID, fallback: group.displayName
+                ),
+                icon: group.icon, metrics: group.metrics
+            )
+        } + summaryGroups
         let bars = (base.bars + summaryGroups.flatMap(\.metrics).filter(\.isBounded))
             .prefix(MenuBarContentBuilder.maxBars)
         let content = MenuBarContent(groups: groups, bars: Array(bars))

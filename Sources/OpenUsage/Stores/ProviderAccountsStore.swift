@@ -74,6 +74,7 @@ final class ProviderAccountsStore {
     static let selectedProfilesKey = "openusage.selectedAccountProfiles.v1"
 
     private let defaults: UserDefaults
+    private let initiallyAliasedIDs: Set<String>
     private(set) var records: [ProviderAccountRecord]
     private(set) var selectedProfiles: [SelectedAccountProfile]
 
@@ -89,16 +90,19 @@ final class ProviderAccountsStore {
         } else {
             selectedProfiles = []
         }
+        let loadedRecords: [ProviderAccountRecord]
         if let data = defaults.data(forKey: Self.storageKey) {
             do {
-                self.records = try JSONDecoder().decode([ProviderAccountRecord].self, from: data)
+                loadedRecords = try JSONDecoder().decode([ProviderAccountRecord].self, from: data)
             } catch {
                 AppLog.error(.config, "provider-account records were undecodable; starting a fresh registry: \(error.localizedDescription)")
-                self.records = []
+                loadedRecords = []
             }
         } else {
-            self.records = []
+            loadedRecords = []
         }
+        self.initiallyAliasedIDs = Set(loadedRecords.filter { $0.alias != nil }.map(\.id))
+        self.records = loadedRecords
     }
 
     @discardableResult
@@ -124,6 +128,18 @@ final class ProviderAccountsStore {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].alias = alias?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         persist()
+    }
+
+    func displayName(for id: String, fallback: String) -> String {
+        guard let record = records.first(where: { $0.id == id }) else { return fallback }
+        if let alias = record.alias { return "\(record.family.capitalized): \(alias)" }
+        guard initiallyAliasedIDs.contains(id), let label = record.label else { return fallback }
+        return "\(record.family.capitalized): \(label)"
+    }
+
+    func displayProvider(_ provider: Provider) -> Provider {
+        Provider(id: provider.id, displayName: displayName(for: provider.id, fallback: provider.displayName),
+                 icon: provider.icon, links: provider.links)
     }
 
     func removeAccount(id: String) {

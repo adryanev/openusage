@@ -136,13 +136,24 @@ public struct UsageReader {
                 .compactMap { id in errors[id].map { "\(id): \($0)" } }
         }
 
+        var sharedSpendLines: [String: [MetricLine]] = [:]
+        if providersOverride == nil,
+           accountAssembly.codexCards.count > 1,
+           enabledOrderedIDs.count(where: { ProviderAccountID.family(of: $0) == "codex" }) > 1 {
+            let history = CodexSharedHistoryStore(
+                additionalHomes: accountAssembly.codexCards[0].logHomes
+            )
+            await history.refresh()
+            sharedSpendLines["codex"] = history.lines
+        }
         let state = LocalUsageAPI.State(
             enabledOrderedIDs: enabledOrderedIDs,
             monitoredIDs: Set(orderedIDs.filter { enablement.isEnabled($0) }),
             knownIDs: knownIDs,
             snapshots: snapshots,
             limitDescriptors: registry.limitDescriptorsByProvider,
-            errors: errors
+            errors: errors,
+            sharedSpendLines: sharedSpendLines
         )
         let path = requestedToken.map { "/v1/limits/\($0)" } ?? "/v1/limits"
         let response = LocalUsageAPI.respond(method: "GET", path: path, state: state)
