@@ -148,7 +148,10 @@ struct WidgetGroupedListView: View {
     private func summaryValue(_ line: MetricLine) -> String? {
         switch line {
         case .values(_, let values, _, _, _, _):
-            return values.map { MetricFormatter.string(for: $0, style: .full) }.joined(separator: " · ")
+            return values.map { value in
+                let style: MetricFormatter.Style = value.kind == .count && value.label == "tokens" ? .row : .full
+                return MetricFormatter.string(for: value, style: style)
+            }.joined(separator: " · ")
         case .progress(_, let used, let limit, let format, _, _, _):
             let kind = format.metricKind
             return "\(MetricFormatter.number(used, kind: kind, style: .row)) / \(MetricFormatter.number(limit, kind: kind, style: .row))"
