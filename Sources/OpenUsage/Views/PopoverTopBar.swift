@@ -16,7 +16,9 @@ struct PopoverTopBar: View {
         case .dashboard:
             EmptyView()
         case .customize:
-            if let providerID = layout.customizeProviderID {
+            if layout.customizeAccounts {
+                navigationBar(title: "Accounts", back: customizeBack) { EmptyView() }
+            } else if let providerID = layout.customizeProviderID {
                 navigationBar(title: customizeTitle, back: customizeBack) {
                     resetButton(for: providerID)
                 }
@@ -43,12 +45,16 @@ struct PopoverTopBar: View {
     }
 
     private var customizeTitle: String {
-        layout.customizeProviderID.flatMap { layout.provider(id: $0)?.displayName } ?? "Customize"
+        if layout.customizeAccounts { return "Accounts" }
+        return layout.customizeProviderID.flatMap { layout.provider(id: $0)?.displayName } ?? "Customize"
     }
 
     private func customizeBack() {
-        if layout.customizeProviderID != nil {
-            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+        if layout.customizeProviderID != nil || layout.customizeAccounts {
+            withAnimation(Motion.spring) {
+                layout.customizeProviderID = nil
+                layout.customizeAccounts = false
+            }
         } else {
             withAnimation(Motion.modeSwitch) { layout.screen = .dashboard }
         }

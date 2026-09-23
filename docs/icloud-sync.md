@@ -24,6 +24,10 @@ without that information is excluded from Swap cards. Codex installations withou
 keep their existing sync behavior. Spending with no reliable owner is excluded when multiple Codex
 accounts are known, so shared history cannot appear on both cards.
 
+Removing an account stops including it in this Mac's next sync file while preserving its local archive.
+Deleting an archived account's history removes that Mac's saved history and excludes earlier local log
+days if the account is added again. Other Macs keep their own files and manage their history locally.
+
 OpenUsage combines the valid files in memory and rebuilds Today, Yesterday, Last 30 Days, Usage Trend,
 unknown-model warnings, and model breakdowns. The same combined spend rows feed the dashboard, Total
 Spend, menu-bar pins, share cards, and the local HTTP API. Both `/v1/usage` and `/v1/limits` read the

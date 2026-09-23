@@ -4,12 +4,14 @@ struct ClaudeAccountCard: Equatable, Sendable {
     let id: String
     let identityKey: String
     let organizationID: String?
-    let displayName: String
+    var displayName: String
     let usesDesktopCredentials: Bool
     let allowsUnattributedPiUsage: Bool
     var swapAccount: ClaudeSwapAccount? = nil
+    var selectedProfiles: [SelectedAccountProfile] = []
     var additionalLogDirectories: [String] = []
     var organizationName: String? = nil
+    var hasObservedSource: Bool = true
 }
 
 /// The launch-time account pass: read which account is signed in at each family's default home,
@@ -27,7 +29,11 @@ struct ProviderAccountAssembly {
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
     /// launch's process environment already carries the user's exports).
-    static func make(defaults: UserDefaults = .standard, waitsForLoginShell: Bool) async -> ProviderAccountAssembly {
+    static func make(
+        defaults: UserDefaults = .standard,
+        accountsStore: ProviderAccountsStore? = nil,
+        waitsForLoginShell: Bool
+    ) async -> ProviderAccountAssembly {
         // The identity read needs the login shell's exports (CLAUDE_CONFIG_DIR/CODEX_HOME name the
         // default homes), and it reads them through the very same reader the provider auth stores
         // use — `ProcessEnvironmentReader`, which pins identity-relevant keys to the persisted
@@ -52,7 +58,7 @@ struct ProviderAccountAssembly {
         }
         return await make(
             observer: DefaultAccountObserver(),
-            accountsStore: ProviderAccountsStore(defaults: defaults),
+            accountsStore: accountsStore ?? ProviderAccountsStore(defaults: defaults),
             families: families
         )
     }
@@ -90,7 +96,7 @@ struct ProviderAccountAssembly {
         let codexCards = families.contains("codex")
             ? await makeCodexCards(observer: observer, accountsStore: accountsStore) : []
         var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })
-        var observations: [ProviderAccountsStore.Observation] = []
+        var observations: [ProviderAccountsStore.AccountObservation] = []
 
         let outcomes: [(family: String, outcome: DefaultAccountObserver.Outcome)] = [
             ("claude", { observer.observeClaude() }),
@@ -102,7 +108,7 @@ struct ProviderAccountAssembly {
             switch outcome {
             case .resolved(let identityKey, let label, let anchor):
                 identityKeys[family] = identityKey
-                observations.append(ProviderAccountsStore.Observation(
+                observations.append(ProviderAccountsStore.AccountObservation(
                     family: family,
                     identityKey: identityKey,
                     label: label,
@@ -116,6 +122,10 @@ struct ProviderAccountAssembly {
                 AppLog.debug(.config, "accounts: \(family) has no default login")
             }
         }
+        if codexCards.isEmpty {
+            accountsStore.reconcile(with: observations.filter { $0.family == "codex" },
+                                    scannedFamilies: ["codex"])
+        }
 
         guard families.contains("claude") else {
             accountsStore.reconcile(with: observations)
@@ -123,6 +133,32 @@ struct ProviderAccountAssembly {
         }
 
         let swapAccounts = ClaudeSwapAccount.discover(files: observer.files, home: observer.homeDirectory())
+        let selectedDiscovery = SelectedAccountProfileDiscovery(
+            environment: observer.environment, files: observer.files,
+            keychain: observer.keychain, homeDirectory: observer.homeDirectory
+        )
+        var selectedFindings: [SelectedAccountProfileDiscovery.Finding] = []
+        for profile in accountsStore.selectedProfiles where profile.family == "claude" {
+            do {
+                let finding = try selectedDiscovery.find(family: "claude", path: profile.path)
+                selectedFindings.append(finding)
+                let source = ProviderAccountSource(
+                    kind: .selectedHome, anchor: finding.profile.path, holdsDefaultSource: false
+                )
+                if let index = observations.firstIndex(where: {
+                    $0.family == "claude" && $0.identityKey == finding.identityKey
+                }) {
+                    observations[index].sources.append(source)
+                } else {
+                    observations.append(.init(
+                        family: "claude", identityKey: finding.identityKey,
+                        label: finding.label, sources: [source]
+                    ))
+                }
+            } catch {
+                AppLog.warn(.config, "selected Claude profile unavailable: \(error.localizedDescription)")
+            }
+        }
         if !swapAccounts.isEmpty {
             AppLog.info(.config, "accounts: discovered \(swapAccounts.count) Claude Swap accounts")
         }
@@ -133,14 +169,16 @@ struct ProviderAccountAssembly {
             }) {
                 observations[index].sources.append(source)
             } else {
-                observations.append(ProviderAccountsStore.Observation(
+                observations.append(ProviderAccountsStore.AccountObservation(
                     family: "claude", identityKey: account.identityKey, label: "\(account.email) (\(account.organizationName ?? "Organization \(account.organizationID.prefix(8))"))", sources: [source]
                 ))
             }
         }
 
-        if let claudeIdentity = identityKeys["claude"], !claudeIdentity.contains("|"), swapAccounts.isEmpty {
-            accountsStore.reconcile(with: observations)
+        if let claudeIdentity = identityKeys["claude"], !claudeIdentity.contains("|"),
+           swapAccounts.isEmpty, selectedFindings.isEmpty,
+           accountsStore.records.count(where: { $0.family == "claude" && !$0.removedTombstone }) <= 1 {
+            accountsStore.reconcile(with: observations, scannedFamilies: ["claude"])
             return ProviderAccountAssembly(identityKeysByCard: identityKeys, codexCards: codexCards)
         }
 
@@ -163,7 +201,7 @@ struct ProviderAccountAssembly {
             }) {
                 observations[index].sources.append(source)
             } else {
-                observations.append(ProviderAccountsStore.Observation(
+                observations.append(ProviderAccountsStore.AccountObservation(
                     family: "claude", identityKey: organization.identityKey,
                     label: organization.label, sources: [source]
                 ))
@@ -171,8 +209,14 @@ struct ProviderAccountAssembly {
         }
 
         let defaultClaudeIdentity = identityKeys["claude"]
-        let records = accountsStore.reconcile(with: observations)
-        let allowsUnattributedPiUsage = records.count { $0.family == "claude" } == 1
+        if let defaultClaudeIdentity, !defaultClaudeIdentity.contains("|"),
+           accountsStore.records.contains(where: {
+               $0.family == "claude" && $0.identityKey.hasPrefix(defaultClaudeIdentity + "|")
+           }) {
+            observations.removeAll { $0.family == "claude" && $0.identityKey == defaultClaudeIdentity }
+        }
+        let records = accountsStore.reconcile(with: observations, scannedFamilies: ["claude"])
+        let allowsUnattributedPiUsage = records.count { $0.family == "claude" && !$0.removedTombstone } == 1
         var cards: [ClaudeAccountCard] = []
         if let defaultIdentity = defaultClaudeIdentity,
            let organization = defaultIdentity.split(separator: "|").last,
@@ -193,6 +237,9 @@ struct ProviderAccountAssembly {
             identityKeys.removeValue(forKey: "claude")
             identityKeys[record.id] = defaultIdentity
         } else if let defaultIdentity = defaultClaudeIdentity,
+                  !records.contains(where: {
+                      $0.family == "claude" && $0.identityKey.hasPrefix(defaultIdentity + "|")
+                  }),
                   let record = records.first(where: {
                       $0.family == "claude" && $0.identityKey == defaultIdentity && !$0.removedTombstone
                   }) {
@@ -243,9 +290,50 @@ struct ProviderAccountAssembly {
             ))
             identityKeys[record.id] = account.identityKey
         }
-        for index in cards.indices {
-            cards[index].additionalLogDirectories = swapAccounts.map(\.sessionDirectory)
+        for record in records where record.family == "claude" && !record.removedTombstone {
+            let matching = selectedFindings.filter { $0.identityKey == record.identityKey }
+            guard !matching.isEmpty else { continue }
+            let profiles = matching.map(\.profile)
+            let logDirectories = profiles.map(\.path)
+            if let index = cards.firstIndex(where: { $0.id == record.id }) {
+                cards[index].selectedProfiles = profiles
+                cards[index].additionalLogDirectories += logDirectories
+            } else {
+                let organization = record.identityKey.split(separator: "|").last.map(String.init)
+                cards.append(ClaudeAccountCard(
+                    id: record.id, identityKey: record.identityKey,
+                    organizationID: record.identityKey.contains("|") ? organization : nil,
+                    displayName: "Claude: \(record.alias ?? record.label ?? "Account")",
+                    usesDesktopCredentials: false,
+                    allowsUnattributedPiUsage: allowsUnattributedPiUsage,
+                    selectedProfiles: profiles, additionalLogDirectories: logDirectories
+                ))
+            }
+            identityKeys[record.id] = record.identityKey
         }
+        for record in records where record.family == "claude" && !record.removedTombstone
+            && !cards.contains(where: { $0.id == record.id }) {
+            let parts = record.identityKey.split(separator: "|")
+            cards.append(ClaudeAccountCard(
+                id: record.id, identityKey: record.identityKey,
+                organizationID: parts.count == 2 ? String(parts[1]) : nil,
+                displayName: "Claude: \(record.alias ?? record.label ?? "Account")",
+                usesDesktopCredentials: false,
+                allowsUnattributedPiUsage: allowsUnattributedPiUsage,
+                hasObservedSource: false
+            ))
+            identityKeys[record.id] = record.identityKey
+        }
+        for index in cards.indices {
+            cards[index].additionalLogDirectories += swapAccounts
+                .filter { $0.identityKey == cards[index].identityKey }
+                .map(\.sessionDirectory)
+            if let record = records.first(where: { $0.id == cards[index].id }), let alias = record.alias {
+                cards[index].displayName = "Claude: \(alias)"
+            }
+        }
+        let recordOrder = Dictionary(uniqueKeysWithValues: records.enumerated().map { ($0.element.id, $0.offset) })
+        cards.sort { (recordOrder[$0.id] ?? Int.max) < (recordOrder[$1.id] ?? Int.max) }
         return ProviderAccountAssembly(identityKeysByCard: identityKeys, claudeCards: cards, codexCards: codexCards)
     }
 

@@ -43,7 +43,7 @@ final class ClaudeSwapAccountTests: XCTestCase {
         ])
         XCTAssertEqual(assembly.identityKeysByCard.count, 3)
         XCTAssertTrue(assembly.claudeCards.allSatisfy { !$0.allowsUnattributedPiUsage })
-        XCTAssertTrue(assembly.claudeCards.allSatisfy { $0.additionalLogDirectories.count == 3 })
+        XCTAssertTrue(assembly.claudeCards.allSatisfy { $0.additionalLogDirectories.count == 1 })
         XCTAssertEqual(store.defaultBadgeHolder(family: "claude")?.sources.map(\.kind), [.defaultHome, .claudeSwap])
         let again = await ProviderAccountAssembly.make(observer: observer, accountsStore: store)
         XCTAssertEqual(assembly.claudeCards, again.claudeCards)

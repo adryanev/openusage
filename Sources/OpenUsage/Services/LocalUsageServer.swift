@@ -50,6 +50,11 @@ final class LocalUsageServer {
         self.listener = listener
     }
 
+    func stop() {
+        listener?.cancel()
+        listener = nil
+    }
+
     private func accept(_ connection: NWConnection) {
         connection.start(queue: queue)
         guard activeConnections < Self.maxConcurrentConnections else {

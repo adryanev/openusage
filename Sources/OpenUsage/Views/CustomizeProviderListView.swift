@@ -25,6 +25,28 @@ struct CustomizeProviderListView: View {
                 }
             }
             .cardSurface()
+            Button {
+                withAnimation(Motion.spring) { layout.customizeAccounts = true }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.2")
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Accounts").fontWeight(.medium)
+                        Text("Manage Codex and Claude profiles")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .cardSurface()
             // App behavior/appearance options live on the other screen; catch users who came here
             // hunting for them once they've scanned past the provider list.
             ScreenCrossLinkRow(

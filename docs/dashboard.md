@@ -2,6 +2,8 @@
 
 The popover that opens from the menu bar icon. Providers are sections; each section shows the metrics you've enabled.
 
+Codex and Claude can show several accounts in one section, with a provider summary above separate account cards. See [Codex and Claude Accounts](accounts.md) for profile setup, account controls, and summary rules.
+
 ## First launch
 
 A fresh install doesn't turn on every provider OpenUsage knows about. It starts with Claude, Codex, and Cursor, then quickly checks which providers have credentials available on your Mac (existing local logins, saved API keys, or supported environment variables — nothing is sent anywhere) and switches to exactly that set. If nothing is found, the Claude/Codex/Cursor starter set stays. A one-time card at the top of the dashboard explains this and points to **Customize**, where you can turn any provider on or off; the card stays until you close it with its ✕ button.

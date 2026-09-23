@@ -20,6 +20,8 @@ struct WidgetGroupedListView: View {
     @State private var frameStore = ReorderFrameStore()
     @State private var activeProviderID: String?
     @State private var activeMetricID: String?
+    @State private var collapsedAccounts: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "openusage.collapsedAccounts.v1") ?? [])
+    @State private var expandedSummaries: Set<String> = []
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     @Environment(\.codexResetClaims) private var codexResetClaims
@@ -29,12 +31,119 @@ struct WidgetGroupedListView: View {
         // still read as groups); the exact step comes from the density setting.
         VStack(alignment: .leading, spacing: density.sectionSpacing) {
             ForEach(layout.displayGroups) { group in
-                section(group)
+                let family = ProviderAccountID.family(of: group.provider.id)
+                let siblings = layout.displayGroups.filter { ProviderAccountID.family(of: $0.provider.id) == family }
+                if ProviderAccountID.families.contains(family), siblings.count > 1 {
+                    if siblings.first?.provider.id == group.provider.id {
+                        accountSection(family: family, groups: siblings)
+                    }
+                } else {
+                    section(group)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onPreferenceChange(ReorderFramePreferenceKey.self) { frameStore.frames = $0 }
         .animation(Motion.spring, value: layout.displayGroups.map(\.provider.id))
+    }
+
+    private func accountSection(family: String, groups: [ProviderGroup]) -> some View {
+        let order = container.accountsStore.records.filter { $0.family == family }.map(\.id)
+        let sorted = groups.sorted { (order.firstIndex(of: $0.provider.id) ?? Int.max) < (order.firstIndex(of: $1.provider.id) ?? Int.max) }
+        let summary = ProviderAccountSummary.make(
+            family: family, accountIDs: sorted.map { $0.provider.id },
+            snapshots: dataStore.snapshots, errors: dataStore.providerErrors
+        )
+        return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
+            Text(family.capitalized).font(.headline).padding(.horizontal, 8)
+            if let summary {
+                summaryCard(summary, family: family, accountCount: sorted.count)
+            }
+            ForEach(sorted) { group in
+                VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
+                    HStack {
+                        Text(group.provider.displayName).font(.subheadline).fontWeight(.semibold)
+                        Spacer()
+                        if let notice = dataStore.headerNotice(for: group.provider.id) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .accessibilityLabel(notice)
+                        }
+                        Button {
+                            if !collapsedAccounts.insert(group.provider.id).inserted {
+                                collapsedAccounts.remove(group.provider.id)
+                            }
+                            UserDefaults.standard.set(collapsedAccounts.sorted(), forKey: "openusage.collapsedAccounts.v1")
+                        } label: {
+                            Image(systemName: collapsedAccounts.contains(group.provider.id) ? "chevron.down" : "chevron.up")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(collapsedAccounts.contains(group.provider.id) ? "Expand Account" : "Collapse Account")
+                    }
+                    .padding(.horizontal, 8)
+                    if !collapsedAccounts.contains(group.provider.id) { container(group) }
+                }
+            }
+        }
+    }
+
+    private func summaryCard(_ summary: ProviderSnapshot, family: String, accountCount: Int) -> some View {
+        let primary = Set(["Session Available", "Weekly Available", "Today", "Last 30 Days"])
+        let visible = summary.lines.filter {
+            primary.contains($0.label) || expandedSummaries.contains(family)
+                || container.summaryPins.isFeatured("\(family):summary.\($0.label)")
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("\(accountCount) Accounts").fontWeight(.semibold)
+                Spacer()
+                Button(expandedSummaries.contains(family) ? "Less" : "More") {
+                    if !expandedSummaries.insert(family).inserted { expandedSummaries.remove(family) }
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(visible, id: \.label) { line in
+                if let value = summaryValue(line) {
+                    HStack {
+                        Text(line.label).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(value)
+                    }
+                    .font(.caption)
+                    .contextMenu {
+                        if case .chart = line {
+                            EmptyView()
+                        } else {
+                            let id = "\(family):summary.\(line.label)"
+                            Button(container.summaryPins.isPinned(id) ? "Unstar" : "Star for menu bar") {
+                                container.summaryPins.setPinned(!container.summaryPins.isPinned(id), for: id)
+                            }
+                        }
+                    }
+                }
+            }
+            if let warning = summary.warning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .cardSurface()
+    }
+
+    private func summaryValue(_ line: MetricLine) -> String? {
+        switch line {
+        case .values(_, let values, _, _, _, _):
+            return values.map { MetricFormatter.string(for: $0, style: .full) }.joined(separator: " · ")
+        case .progress(_, let used, let limit, let format, _, _, _):
+            let kind = format.metricKind
+            return "\(MetricFormatter.number(used, kind: kind, style: .row)) / \(MetricFormatter.number(limit, kind: kind, style: .row))"
+        case .chart(_, let points, _):
+            return MetricFormatter.number(points.reduce(0) { $0 + $1.value }, kind: .count, style: .row) + " tokens"
+        case .text(_, let value, _, _): return value
+        case .badge(_, let text, _, _): return text
+        }
     }
 
     private func section(_ group: ProviderGroup) -> some View {

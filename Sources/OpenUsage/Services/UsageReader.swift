@@ -52,14 +52,19 @@ public struct UsageReader {
                 _ = LoginShellEnvironment.shared.ensureCaptured()
             }.value
         }
+        let accountsStore = ProviderAccountsStore(defaults: defaults)
         let accountAssembly = providersOverride == nil
-            ? await ProviderAccountAssembly.make(defaults: defaults, waitsForLoginShell: false)
+            ? await ProviderAccountAssembly.make(defaults: defaults, accountsStore: accountsStore, waitsForLoginShell: false)
             : ProviderAccountAssembly(identityKeysByCard: [:])
         let providers = providersOverride ?? ProviderCatalog.make(
             defaults: defaults,
             claudeCards: accountAssembly.claudeCards,
             codexCards: accountAssembly.codexCards,
-            claudeIdentityKeys: accountAssembly.identityKeysByCard
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
+            suppressedFamilies: Set(ProviderAccountID.families.filter { family in
+                let records = accountsStore.records.filter { $0.family == family }
+                return !records.isEmpty && records.allSatisfy(\.removedTombstone)
+            })
         )
         let registry = WidgetRegistry.from(providers)
         let knownIDs = Set(registry.providers.map(\.id))
@@ -133,6 +138,7 @@ public struct UsageReader {
 
         let state = LocalUsageAPI.State(
             enabledOrderedIDs: enabledOrderedIDs,
+            monitoredIDs: Set(orderedIDs.filter { enablement.isEnabled($0) }),
             knownIDs: knownIDs,
             snapshots: snapshots,
             limitDescriptors: registry.limitDescriptorsByProvider,

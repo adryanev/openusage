@@ -536,6 +536,9 @@ final class ClaudeProvider: ProviderRuntime {
         refreshToken: String,
         expectedGeneration: ClaudeCredentialGeneration
     ) async throws -> RefreshedAccess {
+        guard !authStore.isSelectedCredentialSource(state.source) else {
+            throw ClaudeAuthError.selectedProfileExpired
+        }
         AppLog.info(LogTag.auth("claude"), "token refresh attempt")
         let response = try await usageClient.refreshToken(refreshToken, config: authStore.oauthConfig())
         if response.statusCode == 400 || response.statusCode == 401 {

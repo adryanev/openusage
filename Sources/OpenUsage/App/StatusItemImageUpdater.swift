@@ -66,10 +66,50 @@ final class StatusItemImageUpdater {
                 ?? MenuBarIcon.image
                 ?? MenuBarStripRenderer.fallbackIcon
         }
-        let content = MenuBarContentBuilder.build(
+        let base = MenuBarContentBuilder.build(
             groups: container.layout.pinnedGroups,
             data: { container.dataStore.data(for: $0) }
         )
+        let summaryGroups = ProviderAccountID.families.sorted().compactMap { family -> MenuBarContent.Group? in
+            let accountIDs = container.layout.orderedProviderIDs().filter {
+                ProviderAccountID.family(of: $0) == family && container.enablement.isEnabled($0)
+            }
+            guard let first = accountIDs.first, let provider = container.layout.provider(id: first),
+                  let snapshot = ProviderAccountSummary.make(
+                    family: family, accountIDs: accountIDs,
+                    snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors
+                  ) else { return nil }
+            let metrics = snapshot.lines.compactMap { line -> MenuBarContent.Metric? in
+                let id = "\(family):summary.\(line.label)"
+                guard container.summaryPins.isPinned(id) else { return nil }
+                switch line {
+                case .values(let label, let values, _, _, _, _) where !values.isEmpty:
+                    let bounded = label.hasSuffix("Available")
+                    return MenuBarContent.Metric(
+                        id: id, label: label,
+                        value: values.map { MetricFormatter.string(for: $0, style: .tray) }.joined(separator: " · "),
+                        fraction: bounded ? min(1, (values.first?.number ?? 0) / Double(accountIDs.count)) : 0,
+                        isBounded: bounded, hasData: true
+                    )
+                case .progress(let label, let used, let limit, let format, _, _, _):
+                    return MenuBarContent.Metric(
+                        id: id, label: label,
+                        value: MetricFormatter.number(used, kind: format.metricKind, style: .tray),
+                        fraction: limit > 0 ? min(1, used / limit) : 0,
+                        isBounded: limit > 0, hasData: true
+                    )
+                default: return nil
+                }
+            }
+            guard !metrics.isEmpty else { return nil }
+            return MenuBarContent.Group(providerID: "\(family):summary",
+                                        displayName: "\(family.capitalized) Summary",
+                                        icon: provider.icon, metrics: metrics)
+        }
+        let groups = base.groups + summaryGroups
+        let bars = (base.bars + summaryGroups.flatMap(\.metrics).filter(\.isBounded))
+            .prefix(MenuBarContentBuilder.maxBars)
+        let content = MenuBarContent(groups: groups, bars: Array(bars))
         return MenuBarStripRenderer.image(for: content, style: container.layout.menuBarStyle)
             ?? MenuBarIcon.image
             ?? MenuBarStripRenderer.fallbackIcon

@@ -181,22 +181,22 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
         )
         let workID = ProviderAccountID.make(family: "claude", identityKey: currentIdentity)
 
-        XCTAssertEqual(assembly.claudeCards.map(\.id), [workID, "claude"])
+        XCTAssertEqual(assembly.claudeCards.map(\.id), ["claude", workID])
         XCTAssertEqual(assembly.identityKeysByCard, [workID: currentIdentity, "claude": previousIdentity])
-        XCTAssertEqual(assembly.claudeCards.map(\.displayName), ["Claude — SUNSTORY", "Claude — Personal"])
+        XCTAssertEqual(assembly.claudeCards.map(\.displayName), ["Claude — Personal", "Claude — SUNSTORY"])
         let providers = ProviderCatalog.make(
             claudeCards: assembly.claudeCards, claudeIdentityKeys: assembly.identityKeysByCard
         ).compactMap { $0 as? ClaudeProvider }
-        XCTAssertEqual(providers.map { $0.provider.id }, [workID, "claude"])
-        XCTAssertEqual(providers.map { $0.authStore.desktopOnly }, [false, true])
-        XCTAssertEqual(providers.map { $0.authStore.preferOrganizationScopedDesktop }, [true, false])
+        XCTAssertEqual(providers.map { $0.provider.id }, ["claude", workID])
+        XCTAssertEqual(providers.map { $0.authStore.desktopOnly }, [true, false])
+        XCTAssertEqual(providers.map { $0.authStore.preferOrganizationScopedDesktop }, [false, true])
         XCTAssertFalse(providers.contains { $0.allowsUnattributedPiUsage })
 
         let withoutDesktop = await ProviderAccountAssembly.make(
             observer: observer, accountsStore: ProviderAccountsStore(defaults: defaults), families: ["claude"],
             desktop: ClaudeDesktopAuthStore(files: FakeFiles(), homeDirectory: { fixtureHome })
         )
-        XCTAssertEqual(withoutDesktop.claudeCards.count, 1)
+        XCTAssertEqual(withoutDesktop.claudeCards.count, 2)
         XCTAssertFalse(try XCTUnwrap(withoutDesktop.claudeCards.first).allowsUnattributedPiUsage)
 
         fixture.files.files["\(home.path)/.claude.json"] =
@@ -205,8 +205,8 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
             observer: observer, accountsStore: ProviderAccountsStore(defaults: defaults), families: ["claude"],
             desktop: fixture.store, listDesktopOrganizationDirectories: { _ in organizations }
         )
-        XCTAssertTrue(legacy.claudeCards.isEmpty)
-        XCTAssertEqual(legacy.identityKeysByCard["claude"], accountUUID)
+        XCTAssertEqual(legacy.claudeCards.count, 2)
+        XCTAssertEqual(legacy.identityKeysByCard["claude"], previousIdentity)
     }
 
     func testV1FallbackDoesNotOverrideTombstonedV2Key() throws {

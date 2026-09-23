@@ -91,6 +91,13 @@ struct ProviderSnapshotCache {
         return loaded
     }
 
+    func removeHistory(providerID: String) {
+        var payload = loadPayload()
+        guard let snapshot = payload.snapshots[providerID] else { return }
+        payload.snapshots[providerID] = UsageHistorySnapshotRenderer.removingHistory(from: snapshot)
+        save(payload)
+    }
+
     /// Remove history invalidated by the current account set without refreshing cached limits.
     /// Both app launch and the one-shot CLI call this before reading any cached snapshot.
     @MainActor

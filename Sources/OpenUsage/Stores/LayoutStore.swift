@@ -35,6 +35,10 @@ final class LayoutStore {
         get { navigation.customizeProviderID }
         set { navigation.customizeProviderID = newValue }
     }
+    var customizeAccounts: Bool {
+        get { navigation.customizeAccounts }
+        set { navigation.customizeAccounts = newValue }
+    }
     /// Placed widget being drag-reordered (transient). `PlacedWidget.id`, never persisted.
     var draggingID: UUID?
     /// Persisted provider display order (provider IDs). Drives both the dashboard groups and the

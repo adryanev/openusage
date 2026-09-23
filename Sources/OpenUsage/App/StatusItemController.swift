@@ -127,6 +127,18 @@ final class StatusItemController: NSObject {
         AppLog.info(.statusItem, "Status item ready (button: \(self.statusItem.button != nil), shortcut: \(KeyboardShortcuts.getShortcut(for: .togglePopover)?.description ?? "none"))")
     }
 
+    var isShowingPopover: Bool { panel.isVisible }
+
+    func invalidate() {
+        if panel.isVisible { hidePanel() }
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
+            self.appearanceObserver = nil
+        }
+        NSStatusBar.system.removeStatusItem(statusItem)
+        panel.close()
+    }
+
     // MARK: - Panel configuration
 
     private func configurePanel() {

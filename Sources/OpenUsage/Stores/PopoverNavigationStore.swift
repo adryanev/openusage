@@ -40,7 +40,10 @@ final class PopoverNavigationStore {
             // Leaving Customize drops the L2 detail selection so reopening Customize shows the list,
             // never a stranded detail screen. The popover-closed reset sets `screen = .dashboard`, so
             // this also covers close/reopen.
-            if screen != .customize { customizeProviderID = nil }
+            if screen != .customize {
+                customizeProviderID = nil
+                customizeAccounts = false
+            }
         }
     }
     /// Supports DashboardView's horizontal screen-switch slide: the screen being left, plus a counter
@@ -56,5 +59,10 @@ final class PopoverNavigationStore {
     /// The provider whose Customize detail (L2) is showing. nil shows the provider list (L1); a set id
     /// shows that provider's metric sections and API key. UI-only (not persisted): cleared when leaving
     /// Customize (see `screen`'s didSet) and on popover close.
-    var customizeProviderID: String?
+    var customizeProviderID: String? {
+        didSet { if customizeProviderID != nil { customizeAccounts = false } }
+    }
+    var customizeAccounts = false {
+        didSet { if customizeAccounts { customizeProviderID = nil } }
+    }
 }

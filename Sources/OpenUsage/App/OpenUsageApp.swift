@@ -4,6 +4,7 @@ import AppKit
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var container: AppContainer?
     private var statusItemController: StatusItemController?
+    private var isReloadingAccounts = false
     private var singleInstanceLock: SingleInstanceLock.Token?
     private let updater = UpdaterController()
 
@@ -87,9 +88,41 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishLaunching(isFreshInstall: Bool) async {
         let container = await AppContainer(isFreshInstall: isFreshInstall)
         self.container = container
+        observeAccountChanges(in: container)
         statusItemController = StatusItemController(container: container, updater: updater)
         // Starts background update checks (release build only; dormant under preview/`swift run`).
         updater.start()
+    }
+
+    private func observeAccountChanges(in container: AppContainer) {
+        container.accountInventory.onChange = { [weak self] in
+            Task { await self?.reloadAccounts() }
+        }
+    }
+
+    private func reloadAccounts() async {
+        guard !isReloadingAccounts else { return }
+        isReloadingAccounts = true
+        defer { isReloadingAccounts = false }
+
+        let wasVisible = statusItemController?.isShowingPopover == true
+        let previousScreen = container?.layout.screen
+        let wasManagingAccounts = container?.layout.customizeAccounts == true
+        let customizedProviderID = container?.layout.customizeProviderID
+        statusItemController?.invalidate()
+        container?.stopForAccountReload()
+        statusItemController = nil
+        container = nil
+
+        let replacement = await AppContainer()
+        if let previousScreen { replacement.layout.screen = previousScreen }
+        replacement.layout.customizeAccounts = wasManagingAccounts
+        if !wasManagingAccounts { replacement.layout.customizeProviderID = customizedProviderID }
+        container = replacement
+        observeAccountChanges(in: replacement)
+        let controller = StatusItemController(container: replacement, updater: updater)
+        statusItemController = controller
+        if wasVisible { controller.showPopover() }
     }
 
     /// Flush queued telemetry on quit. The SDK's lifecycle autocapture is off (we emit our own daily

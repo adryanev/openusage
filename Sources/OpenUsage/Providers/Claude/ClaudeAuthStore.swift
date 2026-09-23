@@ -9,6 +9,7 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
     case desktopCredentialsUnavailable
     case sessionExpired
     case tokenExpired
+    case selectedProfileExpired
     case credentialsChanged
     case invalidOAuthURL(String)
 
@@ -28,6 +29,8 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
             return "Session expired. Run `claude` to log in again."
         case .tokenExpired:
             return "Token expired. Run `claude` to log in again."
+        case .selectedProfileExpired:
+            return "This profile's login expired. Open its Claude CLI profile and sign in again."
         case .credentialsChanged:
             return "Claude login changed during refresh. Refresh again."
         case .invalidOAuthURL(let value):
@@ -43,7 +46,7 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
     /// `CodexAuthError.allowsAuthFallback`.
     var allowsAuthFallback: Bool {
         switch self {
-        case .sessionExpired, .tokenExpired, .desktopTokenExpired, .swapTokenExpired:
+        case .sessionExpired, .tokenExpired, .selectedProfileExpired, .desktopTokenExpired, .swapTokenExpired:
             return true
         case .notLoggedIn, .desktopPermissionRequired, .desktopCredentialsUnavailable,
              .credentialsChanged, .invalidOAuthURL:
@@ -76,6 +79,8 @@ struct ClaudeAuthStore: Sendable {
     let expectedIdentityKey: String?
     let desktopOnly: Bool
     let swapAccount: ClaudeSwapAccount?
+    let selectedProfiles: [SelectedAccountProfile]
+    let hasObservedSource: Bool
     let preferOrganizationScopedDesktop: Bool
 
     init(
@@ -87,6 +92,8 @@ struct ClaudeAuthStore: Sendable {
         expectedIdentityKey: String? = nil,
         desktopOnly: Bool = false,
         swapAccount: ClaudeSwapAccount? = nil,
+        selectedProfiles: [SelectedAccountProfile] = [],
+        hasObservedSource: Bool = true,
         preferOrganizationScopedDesktop: Bool = false,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -98,6 +105,8 @@ struct ClaudeAuthStore: Sendable {
         self.expectedIdentityKey = expectedIdentityKey?.lowercased() ?? swapAccount?.identityKey
         self.desktopOnly = desktopOnly
         self.swapAccount = swapAccount
+        self.selectedProfiles = selectedProfiles
+        self.hasObservedSource = hasObservedSource
         self.preferOrganizationScopedDesktop = preferOrganizationScopedDesktop
         self.now = now
     }
@@ -111,6 +120,9 @@ struct ClaudeAuthStore: Sendable {
         allowDesktopInteraction: Bool = false,
         forceDesktopFallback: Bool = false
     ) -> ClaudeCredentialLoad {
+        guard hasObservedSource else {
+            return ClaudeCredentialLoad(candidates: [], desktopStatus: .notChecked)
+        }
         var stored: [ClaudeCredentialState]
         if let swapAccount {
             var candidates: [ClaudeCredentialState] = []
@@ -127,8 +139,17 @@ struct ClaudeAuthStore: Sendable {
                 }
             }
             candidates += orderedStoredCandidates()
+            candidates += SelectedClaudeCredentialLoader(
+                profiles: selectedProfiles, environment: environment,
+                files: files, keychain: keychain
+            ).load()
             if let vault = loadSwapVaultCredential(swapAccount) { candidates.append(vault) }
             stored = candidates
+        } else if !selectedProfiles.isEmpty {
+            stored = SelectedClaudeCredentialLoader(
+                profiles: selectedProfiles, environment: environment,
+                files: files, keychain: keychain
+            ).load()
         } else {
             stored = desktopOnly ? [] : orderedStoredCandidates()
         }
@@ -140,7 +161,8 @@ struct ClaudeAuthStore: Sendable {
         let hasUsableCLILogin = stored.contains {
             $0.hasUsableAccessToken && liveUsageAvailability($0) == .available
         }
-        if swapAccount != nil || forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop {
+        if selectedProfiles.isEmpty &&
+            (swapAccount != nil || forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop) {
             let expectedUser = expectedIdentityKey?.split(separator: "|").first.map(String.init)
             let result = desktop.load(
                 allowInteraction: allowDesktopInteraction,
@@ -165,7 +187,8 @@ struct ClaudeAuthStore: Sendable {
             stored = stored.filter { liveUsageAvailability($0) == .available }
                 + stored.filter { liveUsageAvailability($0) != .available }
         }
-        let candidates = desktopOnly || swapAccount != nil ? stored : applyingEnvironmentToken(to: stored)
+        let candidates = desktopOnly || swapAccount != nil || !selectedProfiles.isEmpty
+            ? stored : applyingEnvironmentToken(to: stored)
         return ClaudeCredentialLoad(candidates: candidates, desktopStatus: desktopStatus)
     }
 
@@ -209,6 +232,20 @@ struct ClaudeAuthStore: Sendable {
         return expiresAt - now().timeIntervalSince1970 * 1000 <= 5 * 60 * 1000
     }
 
+    func isSelectedCredentialSource(_ source: ClaudeCredentialState.Source) -> Bool {
+        selectedProfiles.contains { profile in
+            let service = Self.scopedKeychainServiceName(
+                forConfigDirLiteral: profile.keychainLiteral ?? profile.path, environment: environment
+            )
+            let file = URL(fileURLWithPath: profile.path).appendingPathComponent(Self.credentialFileName).path
+            switch source {
+            case .accountFile(let path): return path == file
+            case .keychainCurrentUser(let name), .keychainLegacy(let name): return name == service
+            default: return false
+            }
+        }
+    }
+
     func credentialGeneration(forceDesktopFallback: Bool = false) -> ClaudeCredentialGeneration {
         ClaudeCredentialGeneration(loadCredentialSet(forceDesktopFallback: forceDesktopFallback).candidates)
     }
@@ -217,6 +254,7 @@ struct ClaudeAuthStore: Sendable {
     /// whole generation catches a newly added higher-priority source as well as replacement in place.
     /// The underlying stores provide no atomic compare-and-swap, so this remains best-effort.
     func save(_ state: ClaudeCredentialState, ifUnchanged expected: ClaudeCredentialGeneration) throws -> Bool {
+        guard !isSelectedCredentialSource(state.source) else { return false }
         guard credentialGeneration() == expected else { return false }
         var fullData = state.fullData ?? ClaudeCredentialsFile()
         fullData.claudeAiOauth = state.oauth
@@ -333,6 +371,12 @@ struct ClaudeAuthStore: Sendable {
             refreshURL: refreshURL,
             clientID: endpoints.clientID
         )
+    }
+
+    static func scopedKeychainServiceName(forConfigDirLiteral literal: String, environment: EnvironmentReading) -> String {
+        let store = ClaudeAuthStore(environment: environment)
+        let base = "\(keychainServicePrefix)\(store.resolveOAuthEndpoints().suffix)-credentials"
+        return "\(base)-\(store.hashSuffix(literal))"
     }
 
     func keychainServiceCandidates() -> [String] {
