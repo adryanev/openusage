@@ -188,8 +188,11 @@ struct CodexAuthStore: Sendable {
         return Date(timeIntervalSince1970: exp)
     }
 
-    func authPaths() -> [String] {
-        let homes = (codexHome().map { [$0] } ?? Self.defaultAuthHomes) + additionalAuthHomes
+    func authPaths(includeDefaultHomes: Bool = false) -> [String] {
+        let activeHome = codexHome()
+        let homes = (activeHome.map { [$0] } ?? [])
+            + ((includeDefaultHomes || activeHome == nil) ? Self.defaultAuthHomes : [])
+            + additionalAuthHomes
         var seen = Set<String>()
         return homes.map { joinPath($0, Self.authFile) }.filter { seen.insert($0).inserted }
     }

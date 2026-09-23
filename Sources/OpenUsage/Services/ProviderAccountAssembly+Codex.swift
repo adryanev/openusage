@@ -29,7 +29,9 @@ extension ProviderAccountAssembly {
         }
         let auth = CodexAuthStore(environment: observer.environment, files: observer.files,
                                   keychain: observer.keychain)
-        let defaultPaths = auth.authPaths().map(expanded)
+        // Discover both the active CODEX_HOME and the standard home. An override selects the
+        // CLI's current profile; it does not erase another account already signed in at ~/.codex.
+        let defaultPaths = auth.authPaths(includeDefaultHomes: true).map(expanded)
         let mainPaths = swaps.map { $0.mainHome + "/auth.json" }
         var observations: [ProviderAccountsStore.AccountObservation] = []
         var identities: [CodexAccountIdentity] = []

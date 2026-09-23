@@ -45,9 +45,6 @@ enum ProviderAccountSummary {
                 : available.contains { $0.line(label: label) == nil }
         }
         var warnings: [String] = []
-        if !sharedSpendLines.isEmpty {
-            warnings.append("Codex spend is combined from local logs; account ownership is unavailable.")
-        }
         if incomplete || missingOptional {
             warnings.append("Totals incomplete: one or more accounts have no current data.")
         }

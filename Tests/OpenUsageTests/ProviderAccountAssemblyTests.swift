@@ -61,6 +61,49 @@ final class ProviderAccountAssemblyTests: XCTestCase {
         XCTAssertNil(store.defaultBadgeHolder(family: "claude"), "an out-of-pass family must not be reconciled")
     }
 
+    func testCodexHomeOverrideStillFindsSavedStandardHomeAccount() async throws {
+        let defaults = makeScratchDefaults()
+        let store = ProviderAccountsStore(defaults: defaults)
+        let personal = try XCTUnwrap(CodexAccountIdentity(accountID: "personal-workspace", email: "personal@example.com"))
+        let lexicon = try XCTUnwrap(CodexAccountIdentity(accountID: "lexicon-workspace", email: "lexicon@example.com"))
+        store.reconcile(with: [
+            .init(family: "codex", identityKey: personal.key, label: personal.email, sources: []),
+            .init(family: "codex", identityKey: lexicon.key, label: lexicon.email, sources: [])
+        ])
+        func credential(accountID: String, email: String) -> String {
+            let payload = Data(#"{"email":"\#(email)"}"#.utf8).base64EncodedString()
+                .replacingOccurrences(of: "=", with: "")
+            let idToken = "header.\(payload).signature"
+            return #"{"tokens":{"access_token":"access","id_token":"\#(idToken)","account_id":"\#(accountID)"}}"#
+        }
+        let environment = FakeEnvironment(["CODEX_HOME": "/Users/dev/.codex-lexicon"])
+        let files = FakeFiles([
+            "/Users/dev/.codex-lexicon/auth.json":
+                credential(accountID: lexicon.accountID, email: "lexicon@example.com"),
+            "/Users/dev/.codex/auth.json":
+                credential(accountID: personal.accountID, email: "personal@example.com")
+        ])
+        let observer = DefaultAccountObserver(
+            environment: environment, files: files, keychain: FakeKeychain(nil),
+            homeDirectory: { URL(fileURLWithPath: "/Users/dev") }
+        )
+
+        let assembly = await ProviderAccountAssembly.make(
+            observer: observer, accountsStore: store, families: ["codex"]
+        )
+
+        XCTAssertEqual(assembly.codexCards.count, 2)
+        let personalCard = try XCTUnwrap(assembly.codexCards.first { $0.identity == personal })
+        XCTAssertTrue(personalCard.authHomes.contains("/Users/dev/.codex"))
+        let personalRecord = try XCTUnwrap(store.records.first { $0.identityKey == personal.key })
+        XCTAssertEqual(personalRecord.sources.compactMap(\.anchor), ["/Users/dev/.codex"])
+        let personalAuth = CodexAuthStore(
+            environment: environment, files: files, keychain: FakeKeychain(nil),
+            expectedIdentity: personalCard.identity, additionalAuthHomes: personalCard.authHomes
+        )
+        XCTAssertEqual(personalAuth.loadAuthCandidates().count, 1)
+    }
+
     func testNothingObservedLeavesRegistryAndKeysEmpty() async {
         let defaults = makeScratchDefaults()
         let store = ProviderAccountsStore(defaults: defaults)

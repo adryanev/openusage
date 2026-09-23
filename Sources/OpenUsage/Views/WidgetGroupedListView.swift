@@ -135,6 +135,11 @@ struct WidgetGroupedListView: View {
                     }
                 }
             }
+            if family == "codex", container.codexSharedHistory?.lines.isEmpty == false {
+                Label("Spend combines local logs; account attribution is unavailable.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if let warning = summary.warning {
                 Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.caption)

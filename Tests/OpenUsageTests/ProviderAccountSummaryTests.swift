@@ -58,7 +58,19 @@ final class ProviderAccountSummaryTests: XCTestCase {
         ))
         XCTAssertEqual(values(summary.line(label: "Today"))?.first?.number, 4)
         XCTAssertEqual(values(summary.line(label: "Last 30 Days"))?.first?.number, 12)
-        XCTAssertTrue(summary.warning?.contains("combined") == true)
+        XCTAssertNil(summary.warning, "combined local spend alone is informational, not incomplete")
+    }
+
+    func testCodexCombinedSpendStillWarnsWhenAccountDataIsMissing() throws {
+        let first = snapshot("codex", session: 20, weekly: 30, today: 2, tokens: 10)
+        let shared: [MetricLine] = [
+            .values(label: "Today", values: [MetricValue(number: 4, kind: .dollars)])
+        ]
+        let summary = try XCTUnwrap(ProviderAccountSummary.make(
+            family: "codex", accountIDs: [first.providerID, "codex@second"],
+            snapshots: [first.providerID: first], sharedSpendLines: shared
+        ))
+        XCTAssertTrue(summary.warning?.contains("incomplete") == true)
     }
 
     func testCodexCombinedHistoryStaysVisibleWithOneEnabledAccount() throws {

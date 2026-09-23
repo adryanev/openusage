@@ -55,6 +55,9 @@ final class CodexAuthStoreTests: XCTestCase {
 
         XCTAssertEqual(candidates.count, 1)
         XCTAssertEqual(candidates.first?.auth.tokens?.accessToken, "token")
+        XCTAssertEqual(store.authPaths(includeDefaultHomes: true), [
+            "/tmp/codex-home/auth.json", "~/.config/codex/auth.json", "~/.codex/auth.json"
+        ])
     }
 }
 

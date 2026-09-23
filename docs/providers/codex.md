@@ -20,7 +20,7 @@ If Codex reports only a 7-day window, it maps to Weekly without inventing a 5-ho
 
 ## Where credentials come from
 
-Sign in once with the Codex CLI (`codex`); OpenUsage reads the same auth files (`$CODEX_HOME` respected) with a keychain fallback. Tokens refresh automatically and rotate back into the auth file.
+Sign in with the Codex CLI (`codex`); OpenUsage checks the active `$CODEX_HOME` and the standard `~/.config/codex` and `~/.codex` auth files, even when `$CODEX_HOME` points elsewhere. A single default login can refresh its token through OpenUsage. Account cards read matching credentials without rotating them; use the Codex CLI to renew those logins.
 
 ### Codex Swap accounts
 
