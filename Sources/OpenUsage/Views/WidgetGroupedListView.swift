@@ -33,7 +33,8 @@ struct WidgetGroupedListView: View {
             ForEach(layout.displayGroups) { group in
                 let family = ProviderAccountID.family(of: group.provider.id)
                 let siblings = layout.displayGroups.filter { ProviderAccountID.family(of: $0.provider.id) == family }
-                if ProviderAccountID.families.contains(family), siblings.count > 1 {
+                if ProviderAccountID.families.contains(family),
+                   siblings.count > 1 || (family == "codex" && container.codexSharedHistory != nil) {
                     if siblings.first?.provider.id == group.provider.id {
                         accountSection(family: family, groups: siblings)
                     }
@@ -84,6 +85,12 @@ struct WidgetGroupedListView: View {
                         .accessibilityLabel(collapsedAccounts.contains(group.provider.id) ? "Expand Account" : "Collapse Account")
                     }
                     .padding(.horizontal, 8)
+                    if family == "codex", container.codexSharedHistory?.lines.isEmpty == false {
+                        Text("Spend and trend are in Combined Usage above.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                    }
                     if !collapsedAccounts.contains(group.provider.id) { container(group) }
                 }
             }
@@ -98,7 +105,10 @@ struct WidgetGroupedListView: View {
         }
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(accountCount) Accounts").fontWeight(.semibold)
+                Text(family == "codex"
+                    ? "\(accountCount) \(accountCount == 1 ? "Account" : "Accounts") · Combined Usage"
+                    : "\(accountCount) Accounts")
+                    .fontWeight(.semibold)
                 Spacer()
                 Button(expandedSummaries.contains(family) ? "Less" : "More") {
                     if !expandedSummaries.insert(family).inserted { expandedSummaries.remove(family) }

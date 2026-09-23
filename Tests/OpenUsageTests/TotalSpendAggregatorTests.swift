@@ -50,6 +50,31 @@ final class TotalSpendAggregatorTests: XCTestCase {
         XCTAssertEqual(spend.centerValue, 9.75, accuracy: 0.0001)
     }
 
+    func testCombinedCodexSpendReplacesAccountSnapshotsOnce() {
+        let second = Provider(id: "codex@second", displayName: "Codex: Second", icon: .providerMark("codex"))
+        let snapshots = [
+            codex.id: snapshot(codex, lines: [spendLine("Today", dollars: 9, tokens: 900_000)]),
+            second.id: snapshot(second, lines: [spendLine("Today", dollars: 8, tokens: 800_000)]),
+            cursor.id: snapshot(cursor, lines: [spendLine("Today", dollars: 2, tokens: 200_000)])
+        ]
+        let shared = [spendLine("Today", dollars: 3, tokens: 300_000, estimated: true)]
+
+        let total = TotalSpendAggregator.total(
+            for: .today, providers: [codex, second, cursor], snapshots: snapshots,
+            codexSharedLines: shared
+        )
+        XCTAssertEqual(Set(total.slices.map(\.provider.id)), Set(["codex", "cursor"]))
+        XCTAssertEqual(total.totalUSD, 5, accuracy: 0.0001)
+        XCTAssertEqual(total.totalTokens, 500_000, accuracy: 0.0001)
+        XCTAssertTrue(total.isEstimated)
+
+        let pending = TotalSpendAggregator.total(
+            for: .today, providers: [codex, second, cursor], snapshots: snapshots,
+            codexSharedLines: []
+        )
+        XCTAssertEqual(pending.slices.map(\.provider.id), ["cursor"])
+    }
+
     func testProviderWithoutPeriodLineIsExcludedNotZero() {
         let snapshots = [
             "claude": snapshot(claude, lines: [spendLine("Today", dollars: 1.00)]),

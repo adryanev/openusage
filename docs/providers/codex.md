@@ -26,8 +26,8 @@ Sign in once with the Codex CLI (`codex`); OpenUsage reads the same auth files (
 
 OpenUsage shows accounts saved by [Codex Swap (`xswap`)](https://github.com/maddada/codex-swap).
 Each account and workspace gets its own card, labeled with its alias and email. Cards and pins stay
-with the same account when you switch the default login. Restart OpenUsage after adding, removing,
-or renaming an account. Custom locations set with `XSWAP_HOME` or `XDG_DATA_HOME` are supported.
+with the same account when you switch the default login. Refresh OpenUsage after adding, removing,
+or renaming a Swap account. Editing an account alias in OpenUsage updates it immediately. Custom locations set with `XSWAP_HOME` or `XDG_DATA_HOME` are supported.
 Upgrading from a version without Swap support refreshes saved shell settings before account discovery.
 
 - Matching file, Keychain, and Swap logins share a card. If one expires, OpenUsage tries another
@@ -43,7 +43,8 @@ Upgrading from a version without Swap support refreshes saved shell settings bef
 With multiple Codex accounts, spending without a reliable account owner is excluded, including
 previously cached spending. Excluded history is removed before cached data appears or syncs,
 even if the login has expired or the usage request fails. Cached live limits keep their original
-freshness. A shared session folder does not establish who paid for a turn.
+freshness. A shared session folder does not establish who paid for a turn. OpenUsage shows one
+combined local estimate in the Codex summary and omits spend and trend rows from account cards.
 With one known account, shared and copied sessions count once. Synced history must match the
 card's account and workspace. Live usage limits continue to work for every account.
 

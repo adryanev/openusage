@@ -44,7 +44,7 @@ final class CodexProvider: ProviderRuntime {
     }
 
     var widgetDescriptors: [WidgetDescriptor] {
-        [
+        let quotaDescriptors: [WidgetDescriptor] = [
             .percent(id: "\(provider.id).session", provider: provider, title: "Session")
                 .exportingLimit("session", unit: "percent"),
             .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly")
@@ -60,7 +60,12 @@ final class CodexProvider: ProviderRuntime {
                 .exportingLimit("credits", kind: .balance, unit: "credits", source: .value(kind: .count, label: "credits"))
                 .exportingLimit("creditValue", kind: .balance, unit: "usd", source: .value(kind: .dollars)),
             .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true)
-                .exportingLimit("rateLimitResets", kind: .balance, unit: "resets", source: .value(kind: .count, label: "available")),
+                .exportingLimit("rateLimitResets", kind: .balance, unit: "resets", source: .value(kind: .count, label: "available"))
+        ]
+        // Codex rollouts do not identify the paying account. With multiple cards, show local
+        // spend once in the family summary instead of presenting empty per-account widgets.
+        guard allowsUnattributedHistory else { return quotaDescriptors }
+        return quotaDescriptors + [
             .usageTrend(provider: provider)
                 .exportingHistory(
                     scope: .machineLocal,

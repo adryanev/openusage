@@ -31,6 +31,24 @@ final class CodexSwapHistoryTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testMultiAccountCodexCardsOfferQuotaWidgetsOnly() {
+        let account = CodexProvider(allowsUnattributedHistory: false)
+        let accountTitles = Set(account.widgetDescriptors.map(\.title))
+        XCTAssertTrue(accountTitles.contains("Weekly"))
+        XCTAssertTrue(accountTitles.contains("Extra Usage"))
+        XCTAssertFalse(accountTitles.contains("Usage Trend"))
+        XCTAssertFalse(accountTitles.contains("Today"))
+        XCTAssertFalse(accountTitles.contains("Yesterday"))
+        XCTAssertFalse(accountTitles.contains("Last 30 Days"))
+
+        let single = CodexProvider(allowsUnattributedHistory: true)
+        let singleTitles = Set(single.widgetDescriptors.map(\.title))
+        XCTAssertTrue(singleTitles.contains("Usage Trend"))
+        XCTAssertTrue(singleTitles.contains("Today"))
+        XCTAssertTrue(singleTitles.contains("Last 30 Days"))
+    }
+
     func testSyncedCodexHistoryFollowsIdentityInsteadOfPeerCardIDsAndRejectsUnattributedHistory() throws {
         let now = Date()
         func history(_ tokens: Int) -> ProviderUsageHistory {

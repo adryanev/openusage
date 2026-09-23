@@ -61,6 +61,23 @@ final class ProviderAccountSummaryTests: XCTestCase {
         XCTAssertTrue(summary.warning?.contains("combined") == true)
     }
 
+    func testCodexCombinedHistoryStaysVisibleWithOneEnabledAccount() throws {
+        let account = ProviderSnapshot(providerID: "codex", displayName: "Codex", lines: [
+            .progress(label: "Weekly", used: 30, limit: 100, format: .percent)
+        ])
+        let shared: [MetricLine] = [
+            .values(label: "Today", values: [MetricValue(number: 4, kind: .dollars)]),
+        ]
+        let summary = try XCTUnwrap(ProviderAccountSummary.make(
+            family: "codex", accountIDs: [account.providerID],
+            snapshots: [account.providerID: account], sharedSpendLines: shared
+        ))
+        XCTAssertEqual(values(summary.line(label: "Today"))?.first?.number, 4)
+        XCTAssertNil(ProviderAccountSummary.make(
+            family: "codex", accountIDs: [account.providerID], snapshots: [account.providerID: account]
+        ))
+    }
+
     private func values(_ line: MetricLine?) -> [MetricValue]? {
         guard case .values(_, let values, _, _, _, _)? = line else { return nil }
         return values

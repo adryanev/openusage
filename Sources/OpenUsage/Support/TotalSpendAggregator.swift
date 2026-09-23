@@ -166,13 +166,20 @@ enum TotalSpendAggregator {
     static func total(
         for period: TotalSpendPeriod,
         providers: [Provider],
-        snapshots: [String: ProviderSnapshot]
+        snapshots: [String: ProviderSnapshot],
+        codexSharedLines: [MetricLine]? = nil
     ) -> TotalSpend {
-        let slices = providers.compactMap { provider -> TotalSpendSlice? in
-            guard let snapshot = snapshots[provider.id],
-                  let line = snapshot.line(label: period.lineLabel),
-                  case .values(_, let values, _, _, _, _) = line else { return nil }
-
+        let sources: [(Provider, MetricLine)] = providers.compactMap { provider in
+            // In multi-account mode the shared local history is the only Codex spend source.
+            // Old account snapshots must never add a second Codex slice.
+            guard codexSharedLines == nil || ProviderAccountID.family(of: provider.id) != "codex",
+                  let line = snapshots[provider.id]?.line(label: period.lineLabel) else { return nil }
+            return (provider, line)
+        } + (codexSharedLines?.first(where: { $0.label == period.lineLabel }).map {
+            [(Provider(id: "codex", displayName: "Codex", icon: .providerMark("codex")), $0)]
+        } ?? [])
+        let slices = sources.compactMap { provider, line -> TotalSpendSlice? in
+            guard case .values(_, let values, _, _, _, _) = line else { return nil }
             let dollars = values.filter { $0.kind == .dollars }
             let amount = dollars.reduce(0) { $0 + $1.number }
             let tokens = values

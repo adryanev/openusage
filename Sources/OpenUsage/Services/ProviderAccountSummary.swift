@@ -7,7 +7,7 @@ enum ProviderAccountSummary {
         family: String, accountIDs: [String], snapshots: [String: ProviderSnapshot],
         errors: [String: String] = [:], sharedSpendLines: [MetricLine] = []
     ) -> ProviderSnapshot? {
-        guard accountIDs.count > 1 else { return nil }
+        guard accountIDs.count > 1 || (family == "codex" && !sharedSpendLines.isEmpty) else { return nil }
         let available = accountIDs.compactMap { snapshots[$0] }
         let incomplete = available.count != accountIDs.count
             || accountIDs.contains { errors[$0] != nil || snapshots[$0]?.lines.contains(where: \.isError) == true }
