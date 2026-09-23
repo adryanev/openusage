@@ -51,7 +51,8 @@ struct CustomizeAccountsView: View {
             if let summary = ProviderAccountSummary.make(
                 family: family, accountIDs: activeIDs,
                 snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors,
-                sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
+                sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? []
+                    : family == "claude" ? container.claudeSharedHistory?.lines ?? [] : []
             ) {
                 DisclosureGroup("Provider Summary") {
                     ForEach(summary.lines, id: \.label) { line in

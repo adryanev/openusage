@@ -20,6 +20,7 @@ final class ClaudeProvider: ProviderRuntime {
     let usageClient: ClaudeUsageClient
     let logUsageScanner: ClaudeLogUsageScanner
     let allowsUnattributedPiUsage: Bool
+    let usesCombinedSpend: Bool
     let now: @Sendable () -> Date
     let pricing: @Sendable () async -> ModelPricing
 
@@ -54,6 +55,7 @@ final class ClaudeProvider: ProviderRuntime {
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         logUsageScanner: ClaudeLogUsageScanner = ClaudeLogUsageScanner(),
         allowsUnattributedPiUsage: Bool = true,
+        usesCombinedSpend: Bool = false,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
     ) {
@@ -62,6 +64,7 @@ final class ClaudeProvider: ProviderRuntime {
         self.usageClient = usageClient
         self.logUsageScanner = logUsageScanner
         self.allowsUnattributedPiUsage = allowsUnattributedPiUsage
+        self.usesCombinedSpend = usesCombinedSpend
         self.now = now
         self.pricing = pricing
     }
@@ -78,13 +81,14 @@ final class ClaudeProvider: ProviderRuntime {
                 .exportingLimit("sonnet", unit: "percent"),
             .boundedDollars(id: "\(provider.id).extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent")
                 .exportingLimit("extraUsage", unit: "usd", source: .progressOrValue(kind: .dollars)),
+        ] + (usesCombinedSpend ? [] : [
             .usageTrend(provider: provider)
                 .exportingHistory(
                     scope: .machineLocal,
                     estimatedCost: true,
                     sourceNote: "From your Claude usage history (estimated)"
                 )
-        ] + WidgetDescriptor.spendTiles(provider: provider)
+        ] + WidgetDescriptor.spendTiles(provider: provider))
     }
 
     func hasLocalCredentials() async -> Bool {
@@ -296,8 +300,8 @@ final class ClaudeProvider: ProviderRuntime {
         // shared pricing store, merged with Claude usage that happened inside pi (attributed back here).
         // Both scans run on their scanner actors, off the main actor, and do not require an OAuth login.
         let pricing = await pricing()
-        let nativeScan = await logUsageScanner.scan(now: now(), pricing: pricing)
-        let piScan = allowsUnattributedPiUsage
+        let nativeScan = usesCombinedSpend ? nil : await logUsageScanner.scan(now: now(), pricing: pricing)
+        let piScan = !usesCombinedSpend && allowsUnattributedPiUsage
             ? await PiUsageScanner.shared.scan(cardID: provider.id, now: now(), pricing: pricing)
             : nil
         var usageHistory: ProviderUsageHistory?
@@ -321,7 +325,7 @@ final class ClaudeProvider: ProviderRuntime {
             SpendTileMapper.appendUsageTrend(scan.series, to: &mapped.lines, now: now(), note: note)
         }
 
-        MetricLine.appendNoDataIfNeeded(&mapped.lines)
+        if !usesCombinedSpend { MetricLine.appendNoDataIfNeeded(&mapped.lines) }
         return ProviderSnapshot.make(
             provider: provider,
             plan: mapped.plan,

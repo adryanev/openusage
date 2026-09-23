@@ -39,7 +39,8 @@ struct TotalSpendCard: View {
     private var total: TotalSpend {
         TotalSpendAggregator.total(
             for: period, providers: providers, snapshots: dataStore.snapshots,
-            codexSharedLines: layout.hasCodexAccountSummary ? container.codexSharedHistory?.lines : nil
+            codexSharedLines: layout.hasCodexAccountSummary ? container.codexSharedHistory?.lines : nil,
+            claudeSharedLines: layout.hasClaudeAccountSummary ? container.claudeSharedHistory?.lines : nil
         )
     }
 
@@ -108,7 +109,9 @@ struct TotalSpendCard: View {
     /// hardcoded list, so disabling a provider (or a new spend provider shipping) can't make the
     /// tooltip lie about what the total reflects.
     private var infoTooltip: String {
-        let names = providers.map(\.displayName)
+        var names = providers.map(\.displayName)
+        if layout.hasClaudeAccountSummary, container.claudeSharedHistory != nil { names.append("Claude") }
+        if layout.hasCodexAccountSummary, container.codexSharedHistory != nil { names.append("Codex") }
         return "Only includes \(names.formatted(.list(type: .and)))."
     }
 

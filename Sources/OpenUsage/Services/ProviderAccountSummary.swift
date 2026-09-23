@@ -7,13 +7,12 @@ enum ProviderAccountSummary {
         family: String, accountIDs: [String], snapshots: [String: ProviderSnapshot],
         errors: [String: String] = [:], sharedSpendLines: [MetricLine] = []
     ) -> ProviderSnapshot? {
-        guard accountIDs.count > 1 || (family == "codex" && !sharedSpendLines.isEmpty) else { return nil }
+        guard accountIDs.count > 1
+                || ((family == "codex" || family == "claude") && !sharedSpendLines.isEmpty)
+        else { return nil }
         let available = accountIDs.compactMap { snapshots[$0] }
         let incomplete = available.count != accountIDs.count
             || accountIDs.contains { errors[$0] != nil || snapshots[$0]?.lines.contains(where: \.isError) == true }
-            || (sharedSpendLines.isEmpty && available.contains {
-                $0.line(label: "Today") == nil || $0.line(label: "Last 30 Days") == nil
-            })
         var lines: [MetricLine] = []
         for label in ["Session", "Weekly"] {
             let count = available.filter { snapshot in
@@ -41,7 +40,8 @@ enum ProviderAccountSummary {
             }
         }
         let missingOptional = optionalLabels.contains { label in
-            sharedSpendLines.contains(where: { $0.label == label }) ? false
+            guard lines.contains(where: { $0.label == label }) else { return false }
+            return sharedSpendLines.contains(where: { $0.label == label }) ? false
                 : available.contains { $0.line(label: label) == nil }
         }
         var warnings: [String] = []

@@ -146,6 +146,15 @@ public struct UsageReader {
             await history.refresh()
             sharedSpendLines["codex"] = history.lines
         }
+        if providersOverride == nil,
+           accountAssembly.claudeCards.count > 1,
+           enabledOrderedIDs.contains(where: { ProviderAccountID.family(of: $0) == "claude" }) {
+            let history = ClaudeSharedHistoryStore(additionalConfigDirectories: Array(Set(
+                accountAssembly.claudeCards.flatMap(\.additionalLogDirectories)
+            )).sorted())
+            await history.refresh()
+            sharedSpendLines["claude"] = history.lines
+        }
         let state = LocalUsageAPI.State(
             enabledOrderedIDs: enabledOrderedIDs,
             monitoredIDs: Set(orderedIDs.filter { enablement.isEnabled($0) }),

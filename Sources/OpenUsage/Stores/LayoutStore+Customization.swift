@@ -31,6 +31,10 @@ extension LayoutStore {
         displayGroups.contains { ProviderAccountID.family(of: $0.provider.id) == "codex" }
     }
 
+    var hasClaudeAccountSummary: Bool {
+        displayGroups.contains { ProviderAccountID.family(of: $0.provider.id) == "claude" }
+    }
+
     /// Enabled providers that ship the local spend tiles (`WidgetDescriptor.spendTiles`), in the
     /// user's provider order. The Total Spend card also includes shared Codex history when present.
     /// Deliberately *not*

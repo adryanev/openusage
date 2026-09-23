@@ -54,10 +54,18 @@ enum LayoutBootstrap {
         } ?? LayoutOrdering.defaultMetricOrder(registry: registry)
 
         // An existing value — including an empty array from a user who unpinned everything — wins.
-        let pinnedMetricIDs = Set(
-            (persistence.loadPins() ?? defaults.pinnedMetricIDs)
-                .filter { registry.descriptor(id: $0) != nil }
-        )
+        let pinnedMetricIDs = Set((persistence.loadPins() ?? defaults.pinnedMetricIDs).compactMap { id in
+            if registry.descriptor(id: id) != nil { return id }
+            // A single-account pin may outlive the original provider ID when account discovery
+            // introduces scoped cards. Carry that pin to the first account in the saved order.
+            let parts = id.split(separator: ".", maxSplits: 1)
+            guard parts.count == 2, ProviderAccountID.families.contains(String(parts[0])),
+                  let account = registry.providers.first(where: {
+                      ProviderAccountID.family(of: $0.id) == parts[0]
+                  }) else { return nil }
+            let replacement = "\(account.id).\(parts[1])"
+            return registry.descriptor(id: replacement) == nil ? nil : replacement
+        })
 
         // Expanded membership is a fresh-install default only. Existing layouts that predate the feature
         // keep every familiar metric above the caret unless the user later moves one.

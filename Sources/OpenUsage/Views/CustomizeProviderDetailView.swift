@@ -30,11 +30,12 @@ struct CustomizeProviderDetailView: View {
             VStack(alignment: .leading, spacing: density.sectionSpacing) {
                 metricSections(group)
                     .simultaneousGesture(metricDragGesture())
-                if ProviderAccountID.family(of: providerID) == "codex",
+                let family = ProviderAccountID.family(of: providerID)
+                if (family == "codex" || family == "claude"),
                    container.accountsStore.records.count(where: {
-                       $0.family == "codex" && !$0.removedTombstone
+                       $0.family == family && !$0.removedTombstone
                    }) > 1 {
-                    combinedCodexUsageSection
+                    combinedUsageSection(family: family)
                 }
                 if let keyProvider = container.apiKeyProviders.first(where: { $0.provider.id == providerID }) {
                     APIKeysSection(provider: keyProvider)
@@ -51,7 +52,7 @@ struct CustomizeProviderDetailView: View {
         }
     }
 
-    private var combinedCodexUsageSection: some View {
+    private func combinedUsageSection(family: String) -> some View {
         let labels = ["Usage Trend", "Today", "Yesterday", "Last 30 Days"]
         return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
             Text("Combined Usage")
@@ -60,7 +61,7 @@ struct CustomizeProviderDetailView: View {
                 .padding(.horizontal, 8)
             VStack(spacing: 0) {
                 ForEach(labels, id: \.self) { label in
-                    let id = "codex:summary.\(label)"
+                    let id = "\(family):summary.\(label)"
                     HStack(spacing: 12) {
                         Text(label)
                         Spacer()
@@ -87,7 +88,7 @@ struct CustomizeProviderDetailView: View {
                 }
             }
             .cardSurface()
-            Text("Spend and trend include all Codex accounts on this Mac.")
+            Text("Spend and trend include all \(family.capitalized) accounts on this Mac.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)

@@ -75,6 +75,23 @@ final class TotalSpendAggregatorTests: XCTestCase {
         XCTAssertEqual(pending.slices.map(\.provider.id), ["cursor"])
     }
 
+    func testCombinedClaudeSpendReplacesAccountSnapshotsOnce() {
+        let second = Provider(id: "claude@second", displayName: "Claude: Second", icon: .providerMark("claude"))
+        let snapshots = [
+            claude.id: snapshot(claude, lines: [spendLine("Today", dollars: 9)]),
+            second.id: snapshot(second, lines: [spendLine("Today", dollars: 8)])
+        ]
+        let shared = [spendLine("Today", dollars: 12, tokens: 1_200_000, estimated: true)]
+
+        let total = TotalSpendAggregator.total(
+            for: .today, providers: [claude, second], snapshots: snapshots,
+            claudeSharedLines: shared
+        )
+        XCTAssertEqual(total.slices.map(\.provider.id), ["claude"])
+        XCTAssertEqual(total.totalUSD, 12, accuracy: 0.0001)
+        XCTAssertEqual(total.totalTokens, 1_200_000, accuracy: 0.0001)
+    }
+
     func testProviderWithoutPeriodLineIsExcludedNotZero() {
         let snapshots = [
             "claude": snapshot(claude, lines: [spendLine("Today", dollars: 1.00)]),

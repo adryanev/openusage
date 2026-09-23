@@ -41,7 +41,8 @@ enum ProviderCatalog {
                             && card.organizationID != nil && !card.usesDesktopCredentials
                     ),
                     logUsageScanner: scanner,
-                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
+                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage,
+                    usesCombinedSpend: claudeCards.count > 1
                 )
             }
         }

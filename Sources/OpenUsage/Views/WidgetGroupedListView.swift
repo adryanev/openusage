@@ -34,7 +34,9 @@ struct WidgetGroupedListView: View {
                 let family = ProviderAccountID.family(of: group.provider.id)
                 let siblings = layout.displayGroups.filter { ProviderAccountID.family(of: $0.provider.id) == family }
                 if ProviderAccountID.families.contains(family),
-                   siblings.count > 1 || (family == "codex" && container.codexSharedHistory != nil) {
+                   siblings.count > 1
+                       || (family == "codex" && container.codexSharedHistory != nil)
+                       || (family == "claude" && container.claudeSharedHistory != nil) {
                     if siblings.first?.provider.id == group.provider.id {
                         accountSection(family: family, groups: siblings)
                     }
@@ -54,7 +56,8 @@ struct WidgetGroupedListView: View {
         let summary = ProviderAccountSummary.make(
             family: family, accountIDs: sorted.map { $0.provider.id },
             snapshots: dataStore.snapshots, errors: dataStore.providerErrors,
-            sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
+            sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? []
+                : family == "claude" ? container.claudeSharedHistory?.lines ?? [] : []
         )
         return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
             Text(family.capitalized).font(.headline).padding(.horizontal, 8)
@@ -85,7 +88,8 @@ struct WidgetGroupedListView: View {
                         .accessibilityLabel(collapsedAccounts.contains(group.provider.id) ? "Expand Account" : "Collapse Account")
                     }
                     .padding(.horizontal, 8)
-                    if family == "codex", container.codexSharedHistory?.lines.isEmpty == false {
+                    if (family == "codex" && container.codexSharedHistory?.lines.isEmpty == false)
+                        || (family == "claude" && container.claudeSharedHistory?.lines.isEmpty == false) {
                         Text("Spend and trend are in Combined Usage above.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -102,13 +106,13 @@ struct WidgetGroupedListView: View {
         let visible = summary.lines.filter {
             let id = "\(family):summary.\($0.label)"
             return container.summaryPins.isEnabled(id)
-                && (primary.contains($0.label) || (family == "codex" && $0.label == "Usage Trend")
+                && (primary.contains($0.label) || ((family == "codex" || family == "claude") && $0.label == "Usage Trend")
                     || expandedSummaries.contains(family)
                     || container.summaryPins.isFeatured(id))
         }
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(family == "codex"
+                Text(family == "codex" || family == "claude"
                     ? "\(accountCount) \(accountCount == 1 ? "Account" : "Accounts") · Combined Usage"
                     : "\(accountCount) Accounts")
                     .fontWeight(.semibold)
@@ -138,7 +142,8 @@ struct WidgetGroupedListView: View {
                     }
                 }
             }
-            if family == "codex", container.codexSharedHistory?.lines.isEmpty == false {
+            if (family == "codex" && container.codexSharedHistory?.lines.isEmpty == false)
+                || (family == "claude" && container.claudeSharedHistory?.lines.isEmpty == false) {
                 Label("Spend combines local logs; account attribution is unavailable.", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)

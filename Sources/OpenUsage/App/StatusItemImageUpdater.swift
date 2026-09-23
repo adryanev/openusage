@@ -78,7 +78,8 @@ final class StatusItemImageUpdater {
                   let snapshot = ProviderAccountSummary.make(
                     family: family, accountIDs: accountIDs,
                     snapshots: container.dataStore.snapshots, errors: container.dataStore.providerErrors,
-                    sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? [] : []
+                    sharedSpendLines: family == "codex" ? container.codexSharedHistory?.lines ?? []
+                        : family == "claude" ? container.claudeSharedHistory?.lines ?? [] : []
                   ) else { return nil }
             let metrics = snapshot.lines.compactMap { line -> MenuBarContent.Metric? in
                 let id = "\(family):summary.\(line.label)"

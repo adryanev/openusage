@@ -90,6 +90,31 @@ final class ProviderAccountSummaryTests: XCTestCase {
         ))
     }
 
+    func testClaudeCombinedHistoryUsesLocalSpendWithoutAnAccountWarning() throws {
+        let first = ProviderSnapshot(providerID: "claude@first", displayName: "First", lines: [
+            .progress(label: "Session", used: 30, limit: 100, format: .percent),
+            .progress(label: "Weekly", used: 50, limit: 100, format: .percent)
+        ])
+        let second = ProviderSnapshot(providerID: "claude@second", displayName: "Second", lines: [
+            .progress(label: "Session", used: 40, limit: 100, format: .percent),
+            .progress(label: "Weekly", used: 60, limit: 100, format: .percent)
+        ])
+        let shared: [MetricLine] = [
+            .values(label: "Last 30 Days", values: [MetricValue(number: 17, kind: .dollars)])
+        ]
+        let summary = try XCTUnwrap(ProviderAccountSummary.make(
+            family: "claude", accountIDs: [first.providerID, second.providerID],
+            snapshots: [first.providerID: first, second.providerID: second], sharedSpendLines: shared
+        ))
+        XCTAssertEqual(values(summary.line(label: "Last 30 Days"))?.first?.number, 17)
+        XCTAssertNil(summary.warning)
+        let oneEnabled = try XCTUnwrap(ProviderAccountSummary.make(
+            family: "claude", accountIDs: [first.providerID],
+            snapshots: [first.providerID: first], sharedSpendLines: shared
+        ))
+        XCTAssertEqual(values(oneEnabled.line(label: "Last 30 Days"))?.first?.number, 17)
+    }
+
     private func values(_ line: MetricLine?) -> [MetricValue]? {
         guard case .values(_, let values, _, _, _, _)? = line else { return nil }
         return values
