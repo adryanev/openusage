@@ -100,8 +100,11 @@ struct WidgetGroupedListView: View {
     private func summaryCard(_ summary: ProviderSnapshot, family: String, accountCount: Int) -> some View {
         let primary = Set(["Session Available", "Weekly Available", "Today", "Last 30 Days"])
         let visible = summary.lines.filter {
-            primary.contains($0.label) || expandedSummaries.contains(family)
-                || container.summaryPins.isFeatured("\(family):summary.\($0.label)")
+            let id = "\(family):summary.\($0.label)"
+            return container.summaryPins.isEnabled(id)
+                && (primary.contains($0.label) || (family == "codex" && $0.label == "Usage Trend")
+                    || expandedSummaries.contains(family)
+                    || container.summaryPins.isFeatured(id))
         }
         return VStack(alignment: .leading, spacing: 8) {
             HStack {

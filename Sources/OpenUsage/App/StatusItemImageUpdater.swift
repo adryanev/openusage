@@ -82,7 +82,7 @@ final class StatusItemImageUpdater {
                   ) else { return nil }
             let metrics = snapshot.lines.compactMap { line -> MenuBarContent.Metric? in
                 let id = "\(family):summary.\(line.label)"
-                guard container.summaryPins.isPinned(id) else { return nil }
+                guard container.summaryPins.isPinned(id), container.summaryPins.isEnabled(id) else { return nil }
                 switch line {
                 case .values(let label, let values, _, _, _, _) where !values.isEmpty:
                     let bounded = label.hasSuffix("Available")
